@@ -1,26 +1,25 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.utils.translation import gettext_lazy as _
 from .models import User
+from allauth.socialaccount.models import SocialApp
 
+@admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    ordering = ['email']
-    list_display = ['email', 'fullname', 'is_staff', 'is_active']
-    search_fields = ['email', 'fullname']
-    readonly_fields = ['last_login']
-
+    model = User
+    list_display = ('email', 'fullname', 'is_active', 'is_staff')
+    search_fields = ('email', 'fullname')
+    ordering = ('email',)
     fieldsets = (
-        (None, {'fields': ('email', 'password')}),
-        (_('Personal Info'), {'fields': ('fullname', 'avatar', 'terms_accepted')}),
-        (_('Permissions'), {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        (_('Important Dates'), {'fields': ('last_login',)}),
+        (None, {'fields': ('email', 'fullname', 'password', 'avatar', 'terms_accepted')}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Important dates', {'fields': ('created_at',)}),  # <-- Note the trailing comma
     )
-
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'fullname', 'password1', 'password2', 'is_active', 'is_staff', 'is_superuser')}
+            'fields': ('email', 'fullname', 'password1', 'password2', 'terms_accepted', 'avatar')}
         ),
     )
 
-admin.site.register(User, UserAdmin)
+# Optional: register SocialApp so you can add Google config from admin
+# admin.site.register(SocialApp)
