@@ -1,15 +1,31 @@
 from rest_framework.permissions import BasePermission
+from users.models import User, Child
+
 
 class IsParentUser(BasePermission):
     """
-    Allows access only to parent users.
+    Allows access only to users with role='parent'.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and not hasattr(request.user, 'child')
+        return request.user.is_authenticated and hasattr(request.user, 'role') and request.user.role == User.ROLE_PARENT
+
 
 class IsChildUser(BasePermission):
     """
-    Allows access only to child users.
+    Allows access only to users with role='child' or linked to a Child instance.
     """
     def has_permission(self, request, view):
-        return hasattr(request.user, 'child') and not request.user.is_superuser
+        user = request.user
+
+        if not user or not user.is_authenticated:
+            return False
+
+        # Option 1: Child is linked to the user (assuming OneToOne or FK)
+        if hasattr(user, 'role') and user.role == User.ROLE_CHILD:
+            return True
+
+        # Option 2: Authenticated as a User but has a linked Child record
+        try:
+            return Child.objects.filter(parent=user).exists()
+        except:
+            return False
