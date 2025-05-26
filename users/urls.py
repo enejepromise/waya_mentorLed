@@ -1,18 +1,22 @@
 from django.urls import path
-from users.views import (
-    RegisterView, VerifyEmail, LoginView,
-    ChangePasswordView, LogoutView,
-    ForgotPasswordView, ResetPasswordConfirmView
+from .views import (
+    UserRegistrationView,
+    UserLoginView,
+    PasswordChangeView,
+    PasswordResetRequestView,
+    PasswordResetConfirmView,
+    EmailVerificationView,
+    ForgotPasswordView,
+    ResetPasswordConfirmView,
 )
 
 urlpatterns = [
-    path('register/', RegisterView.as_view(), name='register'),
-    path('email-verify/', VerifyEmail.as_view(), name='email-verify'),
-    path('login/', LoginView.as_view(), name='login'),
-    path('change-password/', ChangePasswordView.as_view(), name='change-password'),
-    path('logout/', LogoutView.as_view(), name='logout'),
+    path('register/', UserRegistrationView.as_view(), name='user-register'),
+    path('login/', UserLoginView.as_view(), name='user-login'),
+    path('password-change/', PasswordChangeView.as_view(), name='password-change'),
+    path('password-reset/', PasswordResetRequestView.as_view(), name='password-reset'),
+    path('password-reset-confirm/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
+    path('email-verify/', EmailVerificationView.as_view(), name='email-verify'),
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
-    #path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-
     path('reset-password-confirm/', ResetPasswordConfirmView.as_view(), name='reset-password-confirm'),
 ]

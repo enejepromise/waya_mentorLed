@@ -2,8 +2,12 @@ from pathlib import Path
 import os
 from datetime import timedelta
 from decouple import config, Csv
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env variables
+load_dotenv()
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
@@ -31,17 +35,30 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.facebook',
+    'django_rest_passwordreset',
 
     # Local apps
     'users.apps.UsersConfig',
-    'dashboard.apps.DashboardConfig',
+    'children',
+    'taskmaster',
     'familywallet',
     'insighttracker',
     'settings_waya',
-    'taskmaster',
 ]
 
 AUTH_USER_MODEL = 'users.User'
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+
+# Tell dj-rest-auth to use your custom register serializer
+REST_AUTH_REGISTER_SERIALIZERS = {
+    'REGISTER_SERIALIZER': 'users.serializers.CustomRegisterSerializer',
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -62,7 +79,7 @@ ROOT_URLCONF = 'waya_backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -110,16 +127,26 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-import os
-from dotenv import load_dotenv
+# Email and SendGrid configuration
+SENDGRID_API_KEY = config('SENDGRID_API_KEY')
+SENDGRID_SENDER_EMAIL = config('SENDGRID_SENDER_EMAIL', default='ogunsemorepresh@gmail.com')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=SENDGRID_SENDER_EMAIL)
 
-load_dotenv()
+import ssl
+import certifi
 
-# Email and SendGrid
+ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+# settings.py
+
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
-SENDGRID_SENDER_EMAIL = os.getenv("SENDGRID_SENDER_EMAIL", "ogunsemorepresh@gmail.com")
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+#EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.sendgrid.net'
+EMAIL_PORT = 2525
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'apikey'  # This is literally 'apikey' for SendGrid
+EMAIL_HOST_PASSWORD = SENDGRID_API_KEY
+DEFAULT_FROM_EMAIL = DEFAULT_FROM_EMAIL
 
 # REST Framework
 REST_USE_JWT = True
@@ -149,15 +176,13 @@ SIMPLE_JWT = {
 }
 
 CORS_ALLOW_ALL_ORIGINS = True
-
+FRONTEND_URL = "http://localhost:8000"
 
 # CORS
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:8000",
 ]
-
-from decouple import config
 
 SOCIALACCOUNT_PROVIDERS = {
     'google': {

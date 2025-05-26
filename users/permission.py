@@ -1,6 +1,8 @@
 from rest_framework.permissions import BasePermission
 from users.models import User, Child
-
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from users.permission import IsParentUser
 
 class IsParentUser(BasePermission):
     """
@@ -29,3 +31,11 @@ class IsChildUser(BasePermission):
             return Child.objects.filter(parent=user).exists()
         except:
             return False
+
+class ManageChildrenView(APIView):
+    permission_classes = [IsParentUser]
+
+    def get(self, request):
+        # Only parents reach here
+        children = request.user.children.all()
+        return Response({"children": [child.username for child in children]})

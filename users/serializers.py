@@ -1,168 +1,107 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth import authenticate
-from users.models import User
-from django.utils.encoding import smart_str, force_bytes
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.contrib.auth.tokens import default_token_generator
-from .models import Child
-from .utils import make_pin  # Assumes you have this utility function to hash PINs
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.contrib.auth import get_user_model
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.forms import PasswordResetForm
 
+User = get_user_model()
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    """
-    Serializer for registering a new parent user.
-    Includes validation for password match, role, and terms agreement.
-    """
-    password = serializers.CharField(write_only=True)
-    confirm_password = serializers.CharField(write_only=True)
-    terms_condition = serializers.BooleanField(write_only=True)
-    avatar = serializers.ImageField(required=False)
+    password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    password2 = serializers.CharField(write_only=True, required=True, label='Confirm password', style={'input_type': 'password'})
+    terms_accepted = serializers.BooleanField(required=True)
 
     class Meta:
         model = User
-        fields = ['full_name', 'email', 'role', 'password', 'confirm_password', 'terms_condition', 'avatar']
+        fields = ['email', 'full_name', 'password', 'password2', 'role', 'terms_accepted', 'avatar']
+        extra_kwargs = {
+            'role': {'default': User.ROLE_PARENT},
+            'avatar': {'required': False, 'allow_null': True},
+        }
 
-    def validate(self, data):
-        """
-        Ensure password confirmation matches, role is valid for self-registration, and terms are accepted.
-        """
-        if data['password'] != data['confirm_password']:
-            raise serializers.ValidationError("Passwords do not match.")
-        if data['role'] == 'child':
-            # Prevent children from self-registering
-            raise serializers.ValidationError("Children cannot register themselves.")
-        if not data.get('terms_condition'):
-            raise serializers.ValidationError("You must agree to the terms and conditions.")
-        # Use Django's built-in password validators for strong passwords
-        validate_password(data['password'])
-        return data
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError({"password": "Password fields didn't match."})
+        if not attrs.get('terms_accepted'):
+            raise serializers.ValidationError({"terms_accepted": "You must accept the Terms and Conditions."})
+        return attrs
 
     def create(self, validated_data):
-        """
-        Remove confirm_password and terms_condition before user creation.
-        """
-        validated_data.pop('confirm_password')
-        validated_data.pop('terms_condition')
-        return User.objects.create_user(**validated_data)
+        validated_data.pop('password2')
+        password = validated_data.pop('password')
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
 
-
-class EmailVerificationSerializer(serializers.Serializer):
-    """
-    Serializer for verifying email with UID and token.
-    """
-    uidb64 = serializers.CharField()
-    token = serializers.CharField()
-
-
-class LoginSerializer(serializers.Serializer):
-    """
-    Serializer for logging in a user using email and password.
-    Ensures the account is verified.
-    """
+class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
-    def validate(self, data):
-        """
-        Authenticate the user and check verification status.
-        """
-        user = authenticate(email=data['email'], password=data['password'])
-        if not user:
-            raise serializers.ValidationError("Invalid credentials.")
-        if not user.is_verified:
-            raise serializers.ValidationError("Email is not verified.")
-        data['user'] = user
-        return data
 
-
-class ChangePasswordSerializer(serializers.Serializer):
-    """
-    Serializer for changing the current user's password.
-    """
-    old_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True)
+class PasswordChangeSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(write_only=True, required=True)
 
     def validate_new_password(self, value):
-        """
-        Validate the new password against Django's password rules.
-        """
-        validate_password(value)
+        user = self.context['request'].user
+        try:
+            validate_password(value, user=user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
+
+    def validate(self, attrs):
+        user = self.context['request'].user
+        if not user.check_password(attrs['old_password']):
+            raise serializers.ValidationError({"old_password": _("Old password is not correct.")})
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password'])
+        user.save()
+        return user
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        if not User.objects.filter(email=value).exists():
+            raise serializers.ValidationError(_("User with this email does not exist."))
         return value
 
 
-class ResetPasswordSerializer(serializers.Serializer):
-    """
-    Serializer for resetting password using new credentials.
-    """
-    new_password = serializers.CharField(write_only=True, min_length=8)
-    confirm_password = serializers.CharField(write_only=True)
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    new_password1 = serializers.CharField(write_only=True, required=True)
+    new_password2 = serializers.CharField(write_only=True, required=True)
 
-    def validate(self, data):
-        """
-        Ensure both passwords match and validate password strength.
-        """
-        if data['new_password'] != data['confirm_password']:
-            raise serializers.ValidationError("Passwords do not match.")
-        validate_password(data['new_password'])
-        return data
+    def validate(self, attrs):
+        if attrs['new_password1'] != attrs['new_password2']:
+            raise serializers.ValidationError({"new_password2": _("Password fields didn't match.")})
 
+        user = self.context.get('user')
+        try:
+            validate_password(attrs['new_password1'], user=user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"new_password1": list(e.messages)})
 
-# ------------------- Child Serializers -------------------
+        return attrs
 
-class ChildSerializer(serializers.ModelSerializer):
-    """
-    Serializer for Child model excluding the PIN for security.
-    """
-    class Meta:
-        model = Child
-        fields = ['id', 'username', 'avatar', 'created_at']
-        # Explicitly exclude pin from output for security
-        extra_kwargs = {'pin': {'write_only': True}}
+    def save(self, **kwargs):
+        user = self.context.get('user')
+        user.set_password(self.validated_data['new_password1'])
+        user.save()
+        return user
 
 
-class ChildCreateSerializer(serializers.ModelSerializer):
-    """
-    Serializer for creating a Child.
-    Validates username uniqueness and PIN format.
-    Hashes PIN before saving.
-    """
-    pin = serializers.CharField(write_only=True)
-
-    class Meta:
-        model = Child
-        fields = ['username', 'avatar', 'pin']
-
-    def validate_username(self, value):
-        """
-        Ensure username is unique across children.
-        """
-        if Child.objects.filter(username=value).exists():
-            raise serializers.ValidationError("Username already exists.")
-        return value
-
-    def validate_pin(self, value):
-        """
-        Ensure PIN is exactly 4 digits.
-        """
-        if not value.isdigit() or len(value) != 4:
-            raise serializers.ValidationError("PIN must be exactly 4 digits.")
-        return value
-
-    def create(self, validated_data):
-        """
-        Hash the PIN and associate the child with the current parent user.
-        """
-        # 🔐 Hash the PIN securely before saving
-        validated_data['pin'] = make_pin(validated_data['pin'])
-        # Assign the parent from request context
-        validated_data['parent'] = self.context['request'].user
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        """
-        Hash the PIN if updated.
-        """
-        if 'pin' in validated_data:
-            validated_data['pin'] = make_pin(validated_data['pin'])  # 🔐 Hash PIN on update
-        return super().update(instance, validated_data)
+class EmailVerificationSerializer(serializers.Serializer):
+    uidb64 = serializers.CharField()
+    token = serializers.CharField()
