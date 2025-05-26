@@ -1,176 +1,107 @@
 from rest_framework import serializers
-from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
-from .models import User
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.contrib.auth import get_user_model
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.forms import PasswordResetForm
 
-# Common error message constants
-PASSWORD_MISMATCH_ERROR = {"password": "Password fields didn't match."}
-TERMS_NOT_ACCEPTED_ERROR = {"terms_accepted": "You must accept the terms and conditions."}
-INVALID_LOGIN_ERROR = "Invalid email or password."
+User = get_user_model()
 
-
-class RegisterSerializer(serializers.ModelSerializer):
-    """
-    Serializer for user registration.
-    Handles user creation, password validation, and ensures required fields are present.
-    """
-    password = serializers.CharField(
-        write_only=True,
-        required=True,
-        validators=[validate_password],
-        min_length=8,
-        style={'input_type': 'password'}
-    )
-    confirm_password = serializers.CharField(
-        write_only=True,
-        required=True,
-        min_length=8,
-        style={'input_type': 'password'}
-    )
-    avatar = serializers.ImageField(required=False)
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    password2 = serializers.CharField(write_only=True, required=True, label='Confirm password', style={'input_type': 'password'})
+    terms_accepted = serializers.BooleanField(required=True)
 
     class Meta:
         model = User
-        fields = ('email', 'fullname', 'password', 'confirm_password', 'avatar', 'terms_accepted')
+        fields = ['email', 'full_name', 'password', 'password2', 'role', 'terms_accepted', 'avatar']
+        extra_kwargs = {
+            'role': {'default': User.ROLE_PARENT},
+            'avatar': {'required': False, 'allow_null': True},
+        }
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
 
     def validate(self, attrs):
-        """
-        Custom validation to check that password and confirm_password match,
-        and that the user accepts the terms.
-        """
-        if attrs['password'] != attrs['confirm_password']:
-            raise serializers.ValidationError(PASSWORD_MISMATCH_ERROR)
-
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError({"password": "Password fields didn't match."})
         if not attrs.get('terms_accepted'):
-            raise serializers.ValidationError(TERMS_NOT_ACCEPTED_ERROR)
-
+            raise serializers.ValidationError({"terms_accepted": "You must accept the Terms and Conditions."})
         return attrs
 
     def create(self, validated_data):
-        """
-        Create and return a new User instance, with an encrypted password.
-        """
-        validated_data.pop('confirm_password')
+        validated_data.pop('password2')
         password = validated_data.pop('password')
-        user = User.objects.create_user(password=password, **validated_data)
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
+
+class UserLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(write_only=True, required=True)
+
+    def validate_new_password(self, value):
+        user = self.context['request'].user
+        try:
+            validate_password(value, user=user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
+
+    def validate(self, attrs):
+        user = self.context['request'].user
+        if not user.check_password(attrs['old_password']):
+            raise serializers.ValidationError({"old_password": _("Old password is not correct.")})
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password'])
+        user.save()
         return user
 
 
-class LoginSerializer(serializers.Serializer):
-    """
-    Serializer for user login.
-    Authenticates user using email and password.
-    """
-    email = serializers.EmailField()
-    password = serializers.CharField(
-        write_only=True,
-        style={'input_type': 'password'}
-    )
-
-    def validate(self, data):
-        """
-        Validate that the user credentials are correct and the account is active.
-        """
-        user = authenticate(email=data['email'], password=data['password'])
-        if not user:
-            raise serializers.ValidationError(INVALID_LOGIN_ERROR)
-        if not user.is_active:
-            raise serializers.ValidationError("This user account is inactive.")
-
-        data['user'] = user
-        return data
-
-
-class UserProfileSerializer(serializers.ModelSerializer):
-    """
-    Serializer for displaying and partially updating user profile.
-    """
-    class Meta:
-        model = User
-        fields = ('id', 'email', 'fullname', 'avatar', 'terms_accepted')
-        read_only_fields = ('email', 'terms_accepted')
-
-
-class ChangePasswordSerializer(serializers.Serializer):
-    """
-    Serializer for changing user password.
-    Requires the old password and confirmation of the new password.
-    """
-    old_password = serializers.CharField(
-        required=True,
-        style={'input_type': 'password'}
-    )
-    new_password = serializers.CharField(
-        required=True,
-        validators=[validate_password],
-        min_length=8,
-        style={'input_type': 'password'}
-    )
-    confirm_new_password = serializers.CharField(
-        required=True,
-        min_length=8,
-        style={'input_type': 'password'}
-    )
-
-    def validate(self, attrs):
-        """
-        Ensure the new passwords match.
-        """
-        if attrs['new_password'] != attrs['confirm_new_password']:
-            raise serializers.ValidationError(PASSWORD_MISMATCH_ERROR)
-        return attrs
-
-
 class PasswordResetRequestSerializer(serializers.Serializer):
-    """
-    Serializer for requesting password reset via email.
-    """
     email = serializers.EmailField()
+
+    def validate_email(self, value):
+        if not User.objects.filter(email=value).exists():
+            raise serializers.ValidationError(_("User with this email does not exist."))
+        return value
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
-    """
-    Serializer for confirming new password during reset process.
-    """
-    new_password = serializers.CharField(
-        write_only=True,
-        validators=[validate_password],
-        min_length=8,
-        style={'input_type': 'password'}
-    )
-    confirm_new_password = serializers.CharField(
-        write_only=True,
-        min_length=8,
-        style={'input_type': 'password'}
-    )
+    new_password1 = serializers.CharField(write_only=True, required=True)
+    new_password2 = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
-        """
-        Validate that the new passwords match.
-        """
-        if attrs['new_password'] != attrs['confirm_new_password']:
-            raise serializers.ValidationError(PASSWORD_MISMATCH_ERROR)
+        if attrs['new_password1'] != attrs['new_password2']:
+            raise serializers.ValidationError({"new_password2": _("Password fields didn't match.")})
+
+        user = self.context.get('user')
+        try:
+            validate_password(attrs['new_password1'], user=user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"new_password1": list(e.messages)})
+
         return attrs
 
-# ---------- For Google and Facebook OAuth ---------- #
-# These are handled by dj-rest-auth + allauth integrations.
-# Install packages:
-# pip install dj-rest-auth[with_social] social-auth-app-django
-# Add to settings.py:
-# 'dj_rest_auth.registration', 'allauth', 'allauth.socialaccount',
-# 'allauth.socialaccount.providers.google', 'allauth.socialaccount.providers.facebook'
+    def save(self, **kwargs):
+        user = self.context.get('user')
+        user.set_password(self.validated_data['new_password1'])
+        user.save()
+        return user
 
-# Then include these URLs in urls.py:
-# path('auth/', include('dj_rest_auth.urls')),
-# path('auth/registration/', include('dj_rest_auth.registration.urls')),
-# path('auth/', include('allauth.socialaccount.urls'))
 
-# Google/Facebook login happens via frontend using a social token. 
-# The frontend sends the token to an endpoint like:
-# POST /auth/social/login/ with {'access_token': '...'}
-# The system will return JWT tokens for the user.
-
-# Make sure to configure social providers in the Django admin panel
-# (Sites and SocialApp models).
-
-# Done!
+class EmailVerificationSerializer(serializers.Serializer):
+    uidb64 = serializers.CharField()
+    token = serializers.CharField()
