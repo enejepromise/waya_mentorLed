@@ -4,13 +4,7 @@ from rest_framework.permissions import AllowAny
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from rest_framework import generics, status, permissions
-from users.serializers import PasswordResetRequestSerializer, PasswordResetConfirmSerializer
-from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.http import JsonResponse
-from .signals import send_verification_email
-from rest_framework.views import APIView
-from .serializers import (
+from users.serializers import (
     UserRegistrationSerializer,
     UserLoginSerializer,
     PasswordChangeSerializer,
@@ -18,17 +12,22 @@ from .serializers import (
     PasswordResetConfirmSerializer,
     EmailVerificationSerializer,
 )
+from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.http import JsonResponse
+from .signals import send_verification_email
+from rest_framework.views import APIView
 
 User = get_user_model()
 
 
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
-    permission_classes = [AllowAny]  
+    permission_classes = [AllowAny]
 
     def perform_create(self, serializer):
         user = serializer.save()
-        send_verification_email(user)
+        send_verification_email(user)  # Ensure your signal handles async or errors gracefully
 
 
 class UserLoginView(generics.GenericAPIView):
@@ -39,7 +38,10 @@ class UserLoginView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = authenticate(email=serializer.validated_data['email'], password=serializer.validated_data['password'])
+        user = authenticate(
+            email=serializer.validated_data['email'],
+            password=serializer.validated_data['password']
+        )
         if user is not None:
             refresh = RefreshToken.for_user(user)
             return Response({
@@ -63,16 +65,18 @@ class PasswordChangeView(generics.UpdateAPIView):
 
 class PasswordResetRequestView(generics.GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(request=request)
+        serializer.save(request=request)  # Ensure your serializer implements email sending
         return Response({"message": "Password reset email sent if the email is registered."})
 
 
 class PasswordResetConfirmView(generics.GenericAPIView):
     serializer_class = PasswordResetConfirmSerializer
+    permission_classes = [AllowAny]
 
     def post(self, request, uidb64, token):
         try:
@@ -92,6 +96,7 @@ class PasswordResetConfirmView(generics.GenericAPIView):
 
 class EmailVerificationView(APIView):
     serializer_class = EmailVerificationSerializer
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
@@ -113,6 +118,7 @@ class EmailVerificationView(APIView):
         else:
             return Response({"detail": "Invalid or expired token."}, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ForgotPasswordView(generics.GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
     permission_classes = [AllowAny]
@@ -120,7 +126,7 @@ class ForgotPasswordView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # Implement sending password reset email logic here
+        # Implement sending password reset email logic here if not handled in serializer.save()
         return Response({"detail": "Password reset email sent."})
 
 
@@ -129,10 +135,12 @@ class ResetPasswordConfirmView(generics.GenericAPIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data, context={'user': None})  # Provide user as needed
+        # Provide user context if possible, else None
+        serializer = self.get_serializer(data=request.data, context={'user': None})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({"detail": "Password has been reset successfully."})
+
 
 def home(request):
     return JsonResponse({"message": "Welcome to the Waya Backend API"})

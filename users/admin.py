@@ -7,13 +7,11 @@ User = get_user_model()
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    # Fields to display in the admin list view
     list_display = ('email', 'full_name', 'is_verified', 'is_staff', 'is_active')
     list_filter = ('is_verified', 'is_staff', 'is_active')
     search_fields = ('email', 'full_name')
     ordering = ('email',)
 
-    # Fields shown on the user detail page in admin
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         (_('Personal info'), {'fields': ('full_name',)}),
@@ -21,7 +19,6 @@ class UserAdmin(BaseUserAdmin):
         (_('Important dates'), {'fields': ('last_login', 'date_joined')}),
     )
 
-    # Fields to use when creating a new user in admin
     add_fieldsets = (
         (None, {
             'classes': ('wide',),

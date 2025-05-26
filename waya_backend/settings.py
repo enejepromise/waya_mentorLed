@@ -50,16 +50,18 @@ INSTALLED_APPS = [
 
 AUTH_USER_MODEL = 'users.User'
 
-ACCOUNT_AUTHENTICATION_METHOD = 'email'
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_USER_MODEL_USERNAME_FIELD = None
-ACCOUNT_LOGIN_METHODS = {'email'}
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+# === Corrected allauth + dj-rest-auth settings ===
+# Remove deprecated settings: ACCOUNT_AUTHENTICATION_METHOD, ACCOUNT_EMAIL_REQUIRED, ACCOUNT_USERNAME_REQUIRED
 
-# Custom registration serializer
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']  # Asterisks indicate required fields
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'  # Options: 'mandatory', 'optional', 'none'
+ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True
+
 REST_AUTH_REGISTER_SERIALIZERS = {
-    'REGISTER_SERIALIZER': 'users.serializers.CustomRegisterSerializer',
+    'REGISTER_SERIALIZER': 'users.serializers.UserRegistrationSerializer',
 }
 
 MIDDLEWARE = [
@@ -85,7 +87,7 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
-                'django.template.context_processors.request',
+                'django.template.context_processors.request',  # Required by allauth
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -125,7 +127,7 @@ USE_TZ = True
 
 # Static & Media Files
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # ✅ Required for collectstatic
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Required for collectstatic
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
@@ -134,8 +136,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Email Configuration
-#EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # use in production
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.sendgrid.net'
 EMAIL_PORT = 2525
 EMAIL_USE_TLS = True
@@ -144,12 +145,11 @@ EMAIL_HOST_PASSWORD = config('SENDGRID_API_KEY')
 SENDGRID_SENDER_EMAIL = config('SENDGRID_SENDER_EMAIL', default='ogunsemorepresh@gmail.com')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=SENDGRID_SENDER_EMAIL)
 
-# SSL Certificates (Optional - good for requests/urllib)
+# SSL Certificates for requests
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
 # Django REST Framework and JWT
 REST_USE_JWT = True
-ACCOUNT_EMAIL_VERIFICATION = 'none'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -159,7 +159,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 1,
+    'PAGE_SIZE': 10,
 }
 
 SIMPLE_JWT = {
@@ -170,7 +170,7 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# CORS
+# CORS settings
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",

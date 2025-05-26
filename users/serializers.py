@@ -3,11 +3,12 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
-from django.contrib.auth.forms import PasswordResetForm
+from allauth.account import app_settings
 
 User = get_user_model()
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(required=app_settings.SIGNUP_FIELDS['email']['required'])
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     password2 = serializers.CharField(write_only=True, required=True, label='Confirm password', style={'input_type': 'password'})
     terms_accepted = serializers.BooleanField(required=True)
@@ -22,14 +23,23 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
+            raise serializers.ValidationError(_("A user with this email already exists."))
+        return value
+
+    def validate_terms_accepted(self, value):
+        if not value:
+            raise serializers.ValidationError(_("You must accept the Terms and Conditions."))
         return value
 
     def validate(self, attrs):
-        if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError({"password": "Password fields didn't match."})
-        if not attrs.get('terms_accepted'):
-            raise serializers.ValidationError({"terms_accepted": "You must accept the Terms and Conditions."})
+        if attrs.get('password') != attrs.get('password2'):
+            raise serializers.ValidationError({"password": _("Password fields didn't match.")})
+
+        try:
+            validate_password(attrs.get('password'))
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"password": list(e.messages)})
+
         return attrs
 
     def create(self, validated_data):
@@ -39,6 +49,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
+
 
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -59,7 +70,7 @@ class PasswordChangeSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         user = self.context['request'].user
-        if not user.check_password(attrs['old_password']):
+        if not user.check_password(attrs.get('old_password')):
             raise serializers.ValidationError({"old_password": _("Old password is not correct.")})
         return attrs
 
@@ -84,12 +95,12 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     new_password2 = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
-        if attrs['new_password1'] != attrs['new_password2']:
+        if attrs.get('new_password1') != attrs.get('new_password2'):
             raise serializers.ValidationError({"new_password2": _("Password fields didn't match.")})
 
         user = self.context.get('user')
         try:
-            validate_password(attrs['new_password1'], user=user)
+            validate_password(attrs.get('new_password1'), user=user)
         except DjangoValidationError as e:
             raise serializers.ValidationError({"new_password1": list(e.messages)})
 
