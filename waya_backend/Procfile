@@ -1,3 +1,3 @@
-web: gunicorn waya_backend.wsgi:application
+web: gunicorn waya_backend.wsgi
 worker: celery -A waya_backend worker --loglevel=info
 beat: celery -A waya_backend beat --loglevel=info
