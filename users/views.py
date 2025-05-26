@@ -7,6 +7,7 @@ from rest_framework import generics, status, permissions
 from users.serializers import PasswordResetRequestSerializer, PasswordResetConfirmSerializer
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.http import JsonResponse
 from .signals import send_verification_email
 from rest_framework.views import APIView
 from .serializers import (
@@ -133,3 +134,5 @@ class ResetPasswordConfirmView(generics.GenericAPIView):
         serializer.save()
         return Response({"detail": "Password has been reset successfully."})
 
+def home(request):
+    return JsonResponse({"message": "Welcome to the Waya Backend API"})

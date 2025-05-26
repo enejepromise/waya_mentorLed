@@ -8,6 +8,7 @@ from .views import (
     EmailVerificationView,
     ForgotPasswordView,
     ResetPasswordConfirmView,
+    home,
 )
 
 urlpatterns = [
@@ -19,4 +20,5 @@ urlpatterns = [
     path('email-verify/', EmailVerificationView.as_view(), name='email-verify'),
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
     path('reset-password-confirm/', ResetPasswordConfirmView.as_view(), name='reset-password-confirm'),
+    path('', home, name='home'),  # Added name for reverse lookup
 ]
