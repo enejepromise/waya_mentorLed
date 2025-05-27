@@ -8,6 +8,7 @@ from .views import (
     EmailVerificationView,
     ForgotPasswordView,
     ResetPasswordConfirmView,
+    GoogleLoginView,
     home,
 )
 
@@ -21,4 +22,6 @@ urlpatterns = [
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
     path('reset-password-confirm/', ResetPasswordConfirmView.as_view(), name='reset-password-confirm'),
     path('', home, name='home'),
+    path('social-login/google/', GoogleLoginView.as_view(), name='google-login'),  # <-- NEW
+
 ]

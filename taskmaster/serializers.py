@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Task
+from django.utils import timezone
 
 class TaskCreateUpdateSerializer(serializers.ModelSerializer):
     assignedTo = serializers.UUIDField(source='assigned_to.id')
