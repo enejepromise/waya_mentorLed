@@ -105,13 +105,17 @@ WSGI_APPLICATION = 'waya_backend.wsgi.application'
 # Database configuration with SSL enabled in production
 ssl_require = not DEBUG  # SSL required in production
 
+#DATABASES = {
+   # 'default': dj_database_url.config(
+    #    default=config('DATABASE_URL'),
+     #   conn_max_age=600,
+      #  ssl_require=ssl_require
+    #)
+#}
+# RENDER cloud Postgres database
 DATABASES = {
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL'),
-        conn_max_age=600,
-        ssl_require=ssl_require
-    )
-}
+    'default': dj_database_url.parse(config("DATABASE_URL"))
+    }
 
 # Celery settings - update CELERY_BROKER_URL in production environment variables
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
