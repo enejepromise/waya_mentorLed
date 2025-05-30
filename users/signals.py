@@ -44,4 +44,3 @@ def send_verification_email(user):
     """
 
     send_email_task.delay(subject, user.email, html_content)
-
