@@ -31,7 +31,7 @@ def send_verification_email(user):
     html_content = f"""
     <html>
         <body>
-            <p>Hello {user.username},</p>
+            <p>Hello {user.email},</p>
             <p>Thank you for registering with Waya!</p>
             <p>Please verify your email address by clicking the link below:</p>
             <p><a href="{verify_url}">Verify Email</a></p>
