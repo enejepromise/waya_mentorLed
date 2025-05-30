@@ -114,7 +114,7 @@ ssl_require = not DEBUG  # SSL required in production
 #}
 # RENDER cloud Postgres database
 DATABASES = {
-    'default': dj_database_url.parse(config("DATABASE_URL"))
+    'default': dj_database_url.parse(config("DATABASE_URL"), conn_max_age=600, ssl_require=True)
     }
 
 # Celery settings - update CELERY_BROKER_URL in production environment variables
