@@ -7,15 +7,23 @@ import dj_database_url
 import ssl
 import certifi
 
-# Load .env variables
+# Load .env variables (for local development)
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
+
+# DEBUG mode: False in production, True in development
 DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+
+# Allowed hosts for your app
+ALLOWED_HOSTS = config(
+    'ALLOWED_HOSTS',
+    default='localhost,127.0.0.1',
+    cast=Csv()
+)
 
 # Application definition
 INSTALLED_APPS = [
@@ -50,14 +58,11 @@ INSTALLED_APPS = [
 
 AUTH_USER_MODEL = 'users.User'
 
-# === Corrected allauth + dj-rest-auth settings ===
-# Remove deprecated settings: ACCOUNT_AUTHENTICATION_METHOD, ACCOUNT_EMAIL_REQUIRED, ACCOUNT_USERNAME_REQUIRED
-
+# === Allauth + dj-rest-auth settings ===
 ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']  # Asterisks indicate required fields
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
-
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'  # Options: 'mandatory', 'optional', 'none'
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True
 
 REST_AUTH_REGISTER_SERIALIZERS = {
@@ -66,7 +71,7 @@ REST_AUTH_REGISTER_SERIALIZERS = {
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # For serving static files
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -97,17 +102,19 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'waya_backend.wsgi.application'
 
-# Database
+# Database configuration with SSL enabled in production
+ssl_require = not DEBUG  # SSL required in production
+
 DATABASES = {
     'default': dj_database_url.config(
         default=config('DATABASE_URL'),
         conn_max_age=600,
-        ssl_require=False
+        ssl_require=ssl_require
     )
 }
 
-# Celery settings
-CELERY_BROKER_URL = 'redis://localhost:6379/0' 
+# Celery settings - update CELERY_BROKER_URL in production environment variables
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 
@@ -135,7 +142,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Email Configuration
+# Email Configuration for SendGrid
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.sendgrid.net'
 EMAIL_PORT = 2525
@@ -145,7 +152,7 @@ EMAIL_HOST_PASSWORD = config('SENDGRID_API_KEY')
 SENDGRID_SENDER_EMAIL = config('SENDGRID_SENDER_EMAIL', default='ogunsemorepresh@gmail.com')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=SENDGRID_SENDER_EMAIL)
 
-# SSL Certificates for requests
+# SSL Certificates for requests (e.g., external API calls)
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
 # Django REST Framework and JWT
@@ -170,14 +177,18 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# CORS settings
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-]
+# CORS settings - restrict in production
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = config(
+        'CORS_ALLOWED_ORIGINS',
+        default='https://your-production-frontend.com',
+        cast=Csv()
+    )
 
-FRONTEND_URL = "http://localhost:8000"
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:8000')
 
 # Social Account Providers
 SOCIALACCOUNT_PROVIDERS = {
@@ -192,6 +203,15 @@ SOCIALACCOUNT_PROVIDERS = {
 
 # Security Headers (for production)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SECURE_SSL_REDIRECT = True
+
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
+
+# Optional: Additional security settings for production
+if not DEBUG:
+    SECURE_HSTS_SECONDS = 3600
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+
