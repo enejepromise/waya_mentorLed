@@ -45,7 +45,9 @@ class UserRegistrationView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            user.is_active = False
+            #user.is_active = False
+            user.is_active = True
+            user.is_verified = True
             user.save()
 
             domain = getattr(settings, 'DOMAIN', None) or get_current_site(request).domain
@@ -173,6 +175,7 @@ class EmailVerificationView(APIView):
             return Response({"detail": "Verification link has expired."}, status=status.HTTP_400_BAD_REQUEST)
 
         user.is_verified = True
+        user.is_active = True
         user.save()
         verification.mark_as_verified()
 
