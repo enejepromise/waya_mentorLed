@@ -56,7 +56,9 @@ class UserRegistrationView(generics.CreateAPIView):
 
             if email_verification:
                 token = email_verification.token
-                verification_link = f"https://{domain}{reverse('verify-email')}?uidb64={uidb64}&token={token}"
+                #verification_link = f"https://{domain}{reverse('verify-email')}?uidb64={uidb64}&token={token}"(for testing the backend)
+                verification_link = f"https://{domain}/auth/verify-email/?uidb64={uidb64}&token={token}"
+
 
                 try:
                     # Django's SMTP email system (commented out)
