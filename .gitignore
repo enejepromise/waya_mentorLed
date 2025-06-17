@@ -5,4 +5,5 @@ ALLOWED_HOSTS=127.0.0.1,localhost
 #for production this should be
  
  DEBUG=False
- ALLOWED_HOSTS=domain
+ ALLOWED_HOSTS=domain.env 
+.env 
