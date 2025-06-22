@@ -4,6 +4,7 @@ from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from users.models import User
+from datetime import timedelta
 from children.models import Child
 
 
@@ -166,6 +167,15 @@ class Transaction(models.Model):
         help_text="Task associated with reward transaction"
     )
 
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_transactions',
+        help_text="User who initiated the transaction"
+    )
+
     # Transaction Details
     transaction_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
@@ -244,18 +254,52 @@ class TransactionCategory(models.Model):
 
     def __str__(self):
         return self.name
+    
+class FamilyAllowance(models.Model):
+    """
+    Represents an allowance schedule from a parent to a child.
+    """
+    FREQUENCY_CHOICES = [
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+    ]
 
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+        ('paused', 'Paused'),
+        ('cancelled', 'Cancelled'),
+    ]
 
-# Uncomment if needed later:
-# from django.db.models.signals import post_save
-# from django.dispatch import receiver
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name='allowances')
+    parent = models.ForeignKey(User, on_delete=models.CASCADE, related_name='allowances')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    createdAt = models.DateTimeField(auto_now_add=True)
+    lastPaidAt = models.DateTimeField(null=True, blank=True)
+    nextPaymentDate = models.DateTimeField(blank=True)
 
-# @receiver(post_save, sender=Child)
-# def create_child_wallet(sender, instance, created, **kwargs):
-#     if created:
-#         ChildWallet.objects.create(child=instance)
+    class Meta:
+        unique_together = ['child', 'parent', 'frequency']
 
-# @receiver(post_save, sender=User)
-# def create_family_wallet(sender, instance, created, **kwargs):
-#     if created and instance.role == User.ROLE_PARENT:
-#         FamilyWallet.objects.create(parent=instance)
+    def __str__(self):
+        return f"{self.parent.full_name} - {self.child.username} ({self.frequency})"
+
+    def save(self, *args, **kwargs):
+        # Automatically calculate next payment date on creation
+        if not self.nextPaymentDate:
+            self.nextPaymentDate = self.calculate_next_payment()
+        super().save(*args, **kwargs)
+
+    def calculate_next_payment(self):
+        now = timezone.now()
+        if self.frequency == 'daily':
+            return now + timedelta(days=1)
+        elif self.frequency == 'weekly':
+            return now + timedelta(weeks=1)
+        elif self.frequency == 'monthly':
+            return now + timedelta(days=30)
+        return now

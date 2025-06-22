@@ -3,8 +3,7 @@ from .models import Task
 from django.utils import timezone
 
 class TaskCreateUpdateSerializer(serializers.ModelSerializer):
-    assignedTo = serializers.UUIDField(source='assigned_to.id')
-    parentId = serializers.UUIDField(source='parent.id')
+    assignedTo = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = Task
@@ -15,7 +14,6 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
             'reward',
             'due_date',
             'assignedTo',
-            'parentId',
             'status',
             'created_at',
             'completed_at',
@@ -23,15 +21,21 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'status', 'created_at', 'completed_at')
 
     def validate(self, attrs):
-        assigned_to = attrs.get('assigned_to')
-        parent = attrs.get('parent')
+        request = self.context.get('request')
+        parent = request.user
+
+        assigned_to_id = attrs.pop('assignedTo')
+        from children.models import Child  
+
+        try:
+            assigned_to = Child.objects.get(id=assigned_to_id)
+        except Child.DoesNotExist:
+            raise serializers.ValidationError("Assigned child not found.")
 
         if assigned_to.parent != parent:
-            raise serializers.ValidationError("Child does not belong to the specified parent.")
+            raise serializers.ValidationError("You cannot assign a task to a child that is not yours.")
 
-        if attrs.get('due_date') and attrs['due_date'] < timezone.now().date():
-            raise serializers.ValidationError("Due date cannot be in the past.")
-
+        attrs['assigned_to'] = assigned_to
         return attrs
 
 

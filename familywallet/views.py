@@ -1,7 +1,10 @@
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework import generics, permissions
 from django.db.models import Sum
+from .models import FamilyAllowance
+from .serializers import FamilyAllowanceSerializer
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from datetime import timedelta
@@ -27,7 +30,6 @@ class IsParentPermission(permissions.BasePermission):
             request.user.is_authenticated and
             request.user.role == request.user.ROLE_PARENT
         )
-
 
 class FamilyWalletViewSet(viewsets.ModelViewSet):
     """Family wallet operations (only for parent users)."""
@@ -254,3 +256,21 @@ class TransactionViewSet(viewsets.ModelViewSet):
         transactions = self.get_queryset()[:limit]
         serializer = self.get_serializer(transactions, many=True)
         return Response(serializer.data)
+class CreateFamilyAllowanceView(generics.CreateAPIView):
+    serializer_class = FamilyAllowanceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class ListFamilyAllowancesView(generics.ListAPIView):
+    serializer_class = FamilyAllowanceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        parent = self.request.user
+        queryset = FamilyAllowance.objects.filter(parent=parent)
+        child_id = self.request.query_params.get('childId')
+        status = self.request.query_params.get('status')
+        if child_id:
+            queryset = queryset.filter(child__id=child_id)
+        if status:
+            queryset = queryset.filter(status=status)
+        return queryset

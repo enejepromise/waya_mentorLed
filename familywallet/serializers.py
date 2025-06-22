@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.db.models import Sum
 from .models import FamilyWallet, ChildWallet, Transaction
 from children.models import Child
+from .models import FamilyAllowance
 from users.models import User
 
 
@@ -24,7 +25,6 @@ class UserBasicSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'full_name', 'avatar']
         read_only_fields = ['id']
-
 
 # --- TRANSACTION SERIALIZER (CRUD SUPPORTED) ---
 
@@ -92,7 +92,7 @@ class ChildWalletSerializer(serializers.ModelSerializer):
         model = ChildWallet
         fields = [
             'id', 'child', 'balance', 'total_earned', 'total_spent',
-            'savings_rate', 'is_active', 'created_at', 'updated_at',
+            'savings_rate', 'created_at', 'updated_at',
             'recent_transactions'
         ]
         read_only_fields = [
@@ -120,7 +120,7 @@ class FamilyWalletSerializer(serializers.ModelSerializer):
     class Meta:
         model = FamilyWallet
         fields = [
-            'id', 'parent', 'balance', 'is_active', 'created_at', 'updated_at',
+            'id', 'parent', 'balance', 'created_at', 'updated_at',
             'total_rewards_sent', 'total_rewards_pending', 'children_wallets',
             'recent_transactions'
         ]
@@ -216,3 +216,28 @@ class CreateSpendingTransactionSerializer(serializers.Serializer):
         if data['amount'] > child_wallet.balance:
             raise serializers.ValidationError("Insufficient funds in your wallet.")
         return data
+
+class FamilyAllowanceSerializer(serializers.ModelSerializer):
+    childId = serializers.UUIDField(source='child.id')
+    parentId = serializers.UUIDField(source='parent.id', read_only=True)
+
+    class Meta:
+        model = FamilyAllowance
+        fields = [
+            'id', 'childId', 'parentId', 'amount', 'frequency', 'status',
+            'created_at', 'last_paid_at', 'next_payment_date'
+        ]
+        read_only_fields = ['id', 'created_at', 'last_paid_at', 'next_payment_date', 'parentId']
+
+    def validate(self, attrs):
+        request = self.context['request']
+        parent = request.user
+        child = Child.objects.filter(id=attrs['child']['id'], parent=parent).first()
+        if not child:
+            raise serializers.ValidationError("Child not found or does not belong to you.")
+        return attrs
+
+    def create(self, validated_data):
+        validated_data['parent'] = self.context['request'].user
+        validated_data['child'] = Child.objects.get(id=validated_data['child']['id'])
+        return FamilyAllowance.objects.create(**validated_data)

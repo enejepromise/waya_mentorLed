@@ -1,6 +1,3 @@
-from django.shortcuts import render
-
-# Create your views here.
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from .models import Task
@@ -9,18 +6,22 @@ from .serializers import (
     TaskReadSerializer,
     TaskStatusUpdateSerializer,
 )
-from .permissions import IsParentOfTask, IsChildAssignedToTask  # Import the child permission
+from .permissions import IsParentOfTask, IsChildAssignedToTask  # Custom permissions
 
 
 class TaskCreateView(generics.CreateAPIView):
     serializer_class = TaskCreateUpdateSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_serializer_context(self):
+        """Pass the request to the serializer for validation."""
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
+
     def perform_create(self, serializer):
+        """Attach the parent to the task after validation."""
         parent = self.request.user
-        assigned_to = serializer.validated_data['assigned_to']
-        if assigned_to.parent != parent:
-            raise permissions.PermissionDenied("You cannot assign chores to a child that is not yours.")
         serializer.save(parent=parent)
 
 
@@ -30,7 +31,6 @@ class TaskListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        # Return all chores for all children of the parent
         return Task.objects.filter(parent=user)
 
 
@@ -39,6 +39,11 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated, IsParentOfTask]
     queryset = Task.objects.all()
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context.update({"request": self.request})
+        return context
+
 
 class TaskStatusUpdateView(generics.UpdateAPIView):
     serializer_class = TaskStatusUpdateSerializer
@@ -46,9 +51,7 @@ class TaskStatusUpdateView(generics.UpdateAPIView):
     queryset = Task.objects.all()
 
     def get_object(self):
-        task = super().get_object()
-       
-        return task
+        return super().get_object()
 
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
@@ -68,11 +71,10 @@ class ChildChoreListView(generics.ListAPIView):
 
 class ChildChoreStatusUpdateView(generics.UpdateAPIView):
     serializer_class = TaskStatusUpdateSerializer
-    permission_classes = [permissions.IsAuthenticated, IsChildAssignedToTask]  # Added child permission here
+    permission_classes = [permissions.IsAuthenticated, IsChildAssignedToTask]
     queryset = Task.objects.all()
 
     def get_object(self):
         task = super().get_object()
-        # Enforce object-level permission check for assigned child
         self.check_object_permissions(self.request, task)
         return task
