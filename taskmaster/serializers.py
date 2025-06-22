@@ -2,8 +2,9 @@ from rest_framework import serializers
 from .models import Task
 from django.utils import timezone
 
+
 class TaskCreateUpdateSerializer(serializers.ModelSerializer):
-    assignedTo = serializers.UUIDField(write_only=True)
+    assigned_to = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = Task
@@ -13,7 +14,7 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
             'description',
             'reward',
             'due_date',
-            'assignedTo',
+            'assigned_to',
             'status',
             'created_at',
             'completed_at',
@@ -24,8 +25,8 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         parent = request.user
 
-        assigned_to_id = attrs.pop('assignedTo')
-        from children.models import Child  
+        assigned_to_id = attrs.pop('assigned_to')
+        from children.models import Child
 
         try:
             assigned_to = Child.objects.get(id=assigned_to_id)
@@ -53,8 +54,8 @@ class TaskStatusUpdateSerializer(serializers.ModelSerializer):
 
 
 class TaskReadSerializer(serializers.ModelSerializer):
-    assignedTo = serializers.CharField(source='assigned_to.username')
-    parentId = serializers.CharField(source='parent.id')
+    assigned_to = serializers.CharField(source='assigned_to.username')
+    parent_id = serializers.CharField(source='parent.id')
 
     class Meta:
         model = Task
@@ -64,8 +65,8 @@ class TaskReadSerializer(serializers.ModelSerializer):
             'description',
             'reward',
             'due_date',
-            'assignedTo',
-            'parentId',
+            'assigned_to',
+            'parent_id',
             'status',
             'created_at',
             'completed_at',
