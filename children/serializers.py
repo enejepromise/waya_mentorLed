@@ -9,7 +9,7 @@ class ChildCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Child
-        fields = ('id', 'username', 'pin', 'avatar')  # Removed 'parent'
+        fields = ('id', 'username', 'name','pin', 'avatar')  
         read_only_fields = ('id',)
 
     def validate_pin(self, value):
@@ -42,7 +42,7 @@ class ChildUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Child
-        fields = ('username', 'pin', 'avatar')
+        fields = ('username', 'name', 'pin', 'avatar')
 
     def validate_pin(self, value):
         if not value.isdigit():
@@ -70,7 +70,7 @@ class ChildUpdateSerializer(serializers.ModelSerializer):
 class ChildSerializer(serializers.ModelSerializer):
     class Meta:
         model = Child
-        fields = ('id', 'parent', 'username', 'avatar', 'created_at')
+        fields = ('id', 'parent', 'username', 'name', 'avatar', 'created_at')
         read_only_fields = ('id', 'created_at')
 
 

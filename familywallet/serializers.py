@@ -220,14 +220,17 @@ class CreateSpendingTransactionSerializer(serializers.Serializer):
 class FamilyAllowanceSerializer(serializers.ModelSerializer):
     childId = serializers.UUIDField(source='child.id')
     parentId = serializers.UUIDField(source='parent.id', read_only=True)
+    createdAt = serializers.DateTimeField(source='createdAt', read_only=True)
+    lastPaidAt = serializers.DateTimeField(source='lastPaidAt', read_only=True)
+    nextPaymentDate = serializers.DateTimeField(source='nextPaymentDate', read_only=True)
 
     class Meta:
         model = FamilyAllowance
         fields = [
             'id', 'childId', 'parentId', 'amount', 'frequency', 'status',
-            'created_at', 'last_paid_at', 'next_payment_date'
+            'createdAt', 'lastPaidAt', 'nextPaymentDate'
         ]
-        read_only_fields = ['id', 'created_at', 'last_paid_at', 'next_payment_date', 'parentId']
+        read_only_fields = ['id', 'createdAt', 'lastPaidAt', 'nextPaymentDate', 'parentId']
 
     def validate(self, attrs):
         request = self.context['request']
@@ -240,4 +243,4 @@ class FamilyAllowanceSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['parent'] = self.context['request'].user
         validated_data['child'] = Child.objects.get(id=validated_data['child']['id'])
-        return FamilyAllowance.objects.create(**validated_data)
+        return super().create(validated_data)

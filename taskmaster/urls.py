@@ -6,6 +6,9 @@ from .views import (
     TaskStatusUpdateView,
     ChildChoreListView,
     ChildChoreStatusUpdateView,
+    LegacyActivityListView,
+    LegacyChoreListView,
+
 )
 
 urlpatterns = [
@@ -16,6 +19,8 @@ urlpatterns = [
     path('tasks/<uuid:pk>/update/', TaskDetailView.as_view(), name='task-update'),
     path('tasks/<uuid:pk>/delete/', TaskDetailView.as_view(), name='task-delete'),
     path('tasks/<uuid:pk>/status/', TaskStatusUpdateView.as_view(), name='task-status-update'),
+    path('activities/', LegacyActivityListView.as_view(), name='legacy-activities'),
+    path('chores/', LegacyChoreListView.as_view(), name='legacy-chores'),
 
     # Child Chore Endpoints
     path('child-chores/', ChildChoreListView.as_view(), name='child-chore-list'),

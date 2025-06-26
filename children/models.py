@@ -16,6 +16,7 @@ class Child(models.Model):
         limit_choices_to={'role': User.ROLE_PARENT}  # Ensures only parents can be assigned as parent
     )
     username = models.CharField(max_length=150, unique=True)
+    name = models.CharField(max_length=255, default='Unknown')      
     pin = models.CharField(max_length=128)  # Stores hashed 4-digit PIN
     avatar = models.ImageField(upload_to='child_avatars/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

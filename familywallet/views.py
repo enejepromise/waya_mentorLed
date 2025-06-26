@@ -153,6 +153,46 @@ class ChildWalletViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Return wallets of children linked to the current parent."""
         return ChildWallet.objects.for_parent(self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def analysis(self, request):
+        """
+        Summary of family wallet including activities and savings breakdown
+        """
+        user = request.user
+        wallet = user.family_wallet
+
+        transactions = Transaction.objects.filter(family_wallet=wallet).select_related('child')
+        activities = [
+            {
+                'name': tx.child.username if tx.child else 'N/A',
+                'activity': tx.description,
+                'amount': tx.amount,
+                'status': tx.status,
+                'date': tx.created_at.date()
+            }
+            for tx in transactions
+        ]
+
+        savings_breakdown = []
+        for wallet in ChildWallet.objects.for_parent(user):
+            savings_breakdown.append({
+                'child_name': wallet.child.username,
+                'reward_saved': wallet.balance,
+                'reward_spent': wallet.total_spent,
+                'total_earned': wallet.total_earned,
+                'savings_rate': wallet.savings_rate
+            })
+
+        return Response({
+            'family_wallet_balance': wallet.balance,
+            'total_rewards_sent': wallet.get_total_rewards_sent(),
+            'total_rewards_pending': wallet.get_total_rewards_pending(),
+            'activities': activities,
+            'savings_breakdown': savings_breakdown
+        })
+
+
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
@@ -256,21 +296,27 @@ class TransactionViewSet(viewsets.ModelViewSet):
         transactions = self.get_queryset()[:limit]
         serializer = self.get_serializer(transactions, many=True)
         return Response(serializer.data)
-class CreateFamilyAllowanceView(generics.CreateAPIView):
-    serializer_class = FamilyAllowanceSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-class ListFamilyAllowancesView(generics.ListAPIView):
+class FamilyAllowanceViewSet(viewsets.ModelViewSet):
+    """
+    Handles listing, creating, and retrieving family allowances.
+    """
     serializer_class = FamilyAllowanceSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         parent = self.request.user
         queryset = FamilyAllowance.objects.filter(parent=parent)
+        
+        # Optional filtering
         child_id = self.request.query_params.get('childId')
         status = self.request.query_params.get('status')
+
         if child_id:
             queryset = queryset.filter(child__id=child_id)
         if status:
             queryset = queryset.filter(status=status)
+
         return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(parent=self.request.user)

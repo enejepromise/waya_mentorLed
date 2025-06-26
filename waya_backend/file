@@ -1,0 +1,24 @@
+SECRET_KEY=django-insecure-dbcq^$fkn+mbb*v(cpcp+x*2n2fyn^cuj2%b)b0x)a3xp%lqb5
+DEBUG=True
+DB_NAME=waya1_db
+DB_USER=waya1_db_user
+DB_PASSWORD=kGuT0maiyiXdfF7rc4gS6viTJsDqXEVy
+DB_HOST=127.0.0.1,dpg-d18i7kumcj7s73ddg97g-a
+DB_PORT=5432
+ALLOWED_HOSTS=localhost,127.0.0.1,waya-fawn.vercel.app,waya-backendp-17.onrender.com,3f60-102-90-101-16.ngrok-free.app
+DATABASE_URL=postgresql://waya1_db_user:kGuT0maiyiXdfF7rc4gS6viTJsDqXEVy@dpg-d18i7kumcj7s73ddg97g-a/waya1_db
+
+EMAIL_HOST_USER="apikey"
+#EMAIL_HOST_USER="enejepromise5@gmail.com"
+#EMAIL_HOST_PASSWORD="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"
+#EMAIL_HOST_PASSWORD="auoobzxvyistanto"
+#DEFAULT_FROM_EMAIL="enejepromise5@gmail.com"
+CORS_ALLOWED_ORIGINS=https://waya-fawn.vercel.app
+
+GOOGLE_CLIENT_ID=636896317613-plhpm0breklr3hctdarvconfoaai5u55.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=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
+domain=https://waya-fawn.vercel.app
+
+SENDGRID_API_KEY=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
+DEFAULT_FROM_EMAIL=waya.org.ng@gmail.com
+#EMAIL_BACKEND = sendgrid_backend.SendgridBackend
