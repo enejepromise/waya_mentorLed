@@ -4,21 +4,16 @@ from users.models import User
 from children.models import Child
 from .models import NotificationSettings, RewardSettings
 
-
 class UserProfileSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(source='user.email', read_only=True)
-    full_name = serializers.CharField(source='user.full_name', read_only=True)
-
     class Meta:
         model = User
-        fields = ['avatar', 'full_name', 'email']
-
+        fields = ['avatar', 'full_name', 'email', 'family_name']
+        read_only_fields = ['email']  
 
 class ChildSerializer(serializers.ModelSerializer):
     class Meta:
         model = Child
-        fields = ['id', 'username', 'avatar']  # Include the fields you want to expose
-
+        fields = ['id', 'name', 'username', 'avatar', 'family_name']
 
 class PasswordResetSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)
@@ -31,7 +26,6 @@ class PasswordResetSerializer(serializers.Serializer):
         validate_password(data['new_password'])
         return data
 
-
 class NotificationSettingSerializer(serializers.ModelSerializer):
     class Meta:
         model = NotificationSettings
@@ -41,7 +35,6 @@ class NotificationSettingSerializer(serializers.ModelSerializer):
             'chore_reminder',
             'weekly_summary'
         ]
-
 
 class RewardSettingSerializer(serializers.ModelSerializer):
     class Meta:

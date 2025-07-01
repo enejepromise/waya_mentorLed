@@ -4,13 +4,13 @@ from .views import (
     ChildView,
     PasswordResetView,
     NotificationSettingsView,
-    RewardSettingsView
+    RewardSettingsView,
 )
 
 urlpatterns = [
     path('profile/', UserProfileView.as_view(), name='user-profile'),
-    path('children/<int:child_id>/profile/', ChildView.as_view(), name='child-profile'),
-    path('reset-password/', PasswordResetView.as_view(), name='reset-password'),
-    path('notifications/', NotificationSettingsView.as_view(), name='notification-settings'),
-    path('rewards/', RewardSettingsView.as_view(), name='reward-settings'),
+    path('children/<uuid:child_id>/', ChildView.as_view(), name='child-detail'),
+    path('password-reset/', PasswordResetView.as_view(), name='password-reset'),
+    path('notification-settings/', NotificationSettingsView.as_view(), name='notification-settings'),
+    path('reward-settings/', RewardSettingsView.as_view(), name='reward-settings'),
 ]

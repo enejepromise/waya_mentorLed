@@ -1,18 +1,15 @@
 from rest_framework import serializers
-from .models import Task
+from .models import Chore
 from django.utils import timezone
 from children.models import Child
 
-
-
-class TaskCreateUpdateSerializer(serializers.ModelSerializer):
+class ChoreCreateUpdateSerializer(serializers.ModelSerializer):
     assigned_to = serializers.UUIDField(write_only=True)
 
     class Meta:
-        model = Task
+        model = Chore
         fields = (
             'id',
-            'parent_id'
             'title',
             'description',
             'reward',
@@ -29,24 +26,27 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
         parent = request.user
 
         assigned_to_id = attrs.pop('assigned_to')
-
         try:
             assigned_to = Child.objects.get(id=assigned_to_id)
         except Child.DoesNotExist:
             raise serializers.ValidationError("Assigned child not found.")
 
         if assigned_to.parent != parent:
-            raise serializers.ValidationError("You cannot assign a task to a child that is not yours.")
+            raise serializers.ValidationError("You cannot assign a chore to a child that is not yours.")
 
         attrs['assigned_to'] = assigned_to
         return attrs
 
+    def create(self, validated_data):
+        validated_data['parent'] = self.context['request'].user
+        return super().create(validated_data)
 
-class TaskStatusUpdateSerializer(serializers.ModelSerializer):
-    status = serializers.ChoiceField(choices=Task.STATUS_CHOICES)
+
+class ChoreStatusUpdateSerializer(serializers.ModelSerializer):
+    status = serializers.ChoiceField(choices=Chore.STATUS_CHOICES)
 
     class Meta:
-        model = Task
+        model = Chore
         fields = ('status',)
 
     def update(self, instance, validated_data):
@@ -54,22 +54,25 @@ class TaskStatusUpdateSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-
-class TaskReadSerializer(serializers.ModelSerializer):
+class ChoreReadSerializer(serializers.ModelSerializer):
     assignedTo = serializers.UUIDField(source='assigned_to.id')
+    assignedToName = serializers.CharField(source='assigned_to.name')
+    assignedToUsername = serializers.CharField(source='assigned_to.username')
     parentId = serializers.UUIDField(source='parent.id')
     amount = serializers.DecimalField(source='reward', max_digits=10, decimal_places=2)
     createdAt = serializers.DateTimeField(source='created_at')
     completedAt = serializers.DateTimeField(source='completed_at')
-    category = serializers.CharField(required=False)  # Optional, for chores endpoint
+    category = serializers.CharField(required=False)
 
     class Meta:
-        model = Task
+        model = Chore
         fields = (
             'id',
             'title',
             'description',
             'assignedTo',
+            'assignedToName',
+            'assignedToUsername',
             'status',
             'amount',
             'createdAt',
@@ -77,4 +80,3 @@ class TaskReadSerializer(serializers.ModelSerializer):
             'parentId',
             'category',
         )
-

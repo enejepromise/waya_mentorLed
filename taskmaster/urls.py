@@ -1,28 +1,27 @@
 from django.urls import path
 from .views import (
-    TaskCreateView,
-    TaskListView,
-    TaskDetailView,
-    TaskStatusUpdateView,
+    ChoreCreateView,
+    ChoreListView,
+    ChoreDetailView,
+    ChoreStatusUpdateView,
+    ChoreDeleteView,
     ChildChoreListView,
     ChildChoreStatusUpdateView,
-    LegacyActivityListView,
-    LegacyChoreListView,
-
+    ChoreStatusBreakdownView,
 )
 
 urlpatterns = [
-    # Parent Task Endpoints
-    path('tasks/create/', TaskCreateView.as_view(), name='task-create'),
-    path('tasks/', TaskListView.as_view(), name='task-list'),
-    path('tasks/<uuid:pk>/', TaskDetailView.as_view(), name='task-detail'),
-    path('tasks/<uuid:pk>/update/', TaskDetailView.as_view(), name='task-update'),
-    path('tasks/<uuid:pk>/delete/', TaskDetailView.as_view(), name='task-delete'),
-    path('tasks/<uuid:pk>/status/', TaskStatusUpdateView.as_view(), name='task-status-update'),
-    path('activities/', LegacyActivityListView.as_view(), name='legacy-activities'),
-    path('chores/', LegacyChoreListView.as_view(), name='legacy-chores'),
+    # Chore CRUD and parent status update
+    path("chores/", ChoreListView.as_view(), name="chore-list"),
+    path("chores/create/", ChoreCreateView.as_view(), name="chore-create"),
+    path("chores/<uuid:pk>/", ChoreDetailView.as_view(), name="chore-detail"),
+    path("chores/<uuid:pk>/delete/", ChoreDeleteView.as_view(), name="chore-delete"),
+    path("chores/<uuid:pk>/status/", ChoreStatusUpdateView.as_view(), name="chore-status-update"),
 
-    # Child Chore Endpoints
-    path('child-chores/', ChildChoreListView.as_view(), name='child-chore-list'),
-    path('child-chores/<uuid:pk>/status/', ChildChoreStatusUpdateView.as_view(), name='child-chore-status-update'),
+    # Chore summary (used for pie chart)
+    path("chores/summary/", ChoreStatusBreakdownView.as_view(), name="chore-summary"),
+
+    # Child-specific chore actions
+    path("children/chores/", ChildChoreListView.as_view(), name="child-chore-list"),
+    path("children/chores/<uuid:pk>/status/", ChildChoreStatusUpdateView.as_view(), name="child-chore-status-update"),
 ]

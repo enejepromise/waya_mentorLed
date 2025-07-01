@@ -1,23 +1,38 @@
 from django.urls import path
-from familywallet import views
+from .views import (
+    FamilyWalletViewSet,
+    ChildWalletViewSet,
+    TransactionViewSet,
+    AllowanceViewSet,
+)
 
 urlpatterns = [
-    path('api/parents/wallet/', views.FamilyWalletViewSet.as_view({'get': 'retrieve'}), name='family-wallet'),
-    path('api/parents/wallet/dashboard-stats/', views.FamilyWalletViewSet.as_view({'get': 'dashboard_stats'}), name='wallet-dashboard-stats'),
-    path('api/parents/wallet/add-funds/', views.FamilyWalletViewSet.as_view({'post': 'add_funds'}), name='wallet-add-funds'),
-    path('api/parents/wallet/earnings-chart/', views.FamilyWalletViewSet.as_view({'get': 'earnings_chart_data'}), name='wallet-earnings-chart'),
-    path('api/parents/wallet/savings-breakdown/', views.FamilyWalletViewSet.as_view({'get': 'savings_breakdown'}), name='wallet-savings-breakdown'),
+    # FAMILY WALLET ENDPOINTS
+    path('wallet/', FamilyWalletViewSet.as_view({'get': 'list'}), name='wallet-list'),
+    path('wallet/add_funds/', FamilyWalletViewSet.as_view({'post': 'add_funds'}), name='wallet-add-funds'),
+    path('wallet/dashboard_stats/', FamilyWalletViewSet.as_view({'get': 'dashboard_stats'}), name='wallet-dashboard-stats'),
+    path('wallet/earnings_chart_data/', FamilyWalletViewSet.as_view({'get': 'earnings_chart_data'}), name='wallet-earnings-chart-data'),
+    path('wallet/savings_breakdown/', FamilyWalletViewSet.as_view({'get': 'savings_breakdown'}), name='wallet-savings-breakdown'),
+    path('wallet/transfer/', FamilyWalletViewSet.as_view({'post': 'transfer'}), name='wallet-transfer'),
 
-    # Transactions
-    path('api/parents/wallet/transactions/', views.TransactionViewSet.as_view({'get': 'list'}), name='wallet-transactions'),
-    path('api/parents/wallet/transactions/<uuid:pk>/complete/', views.TransactionViewSet.as_view({'post': 'complete'}), name='transaction-complete'),
-    path('api/parents/wallet/transactions/<uuid:pk>/cancel/', views.TransactionViewSet.as_view({'post': 'cancel'}), name='transaction-cancel'),
-    path('api/parents/wallet/transactions/complete-multiple/', views.TransactionViewSet.as_view({'post': 'complete_multiple'}), name='transactions-complete-multiple'),
-    path('api/parents/wallet/transactions/recent/', views.TransactionViewSet.as_view({'get': 'recent_activities'}), name='transactions-recent'),
+    # CHILD WALLET ANALYSIS
+    path('child-wallets/', ChildWalletViewSet.as_view({'get': 'list'}), name='child-wallets-list'),
+    path('child-wallets/analysis/', ChildWalletViewSet.as_view({'get': 'analysis'}), name='child-wallets-analysis'),
 
-    # Children Wallets
-    path('api/parents/wallet/children-wallets/', views.ChildWalletViewSet.as_view({'get': 'list'}), name='children-wallets'),
-    path('api/parents/wallet/children-wallets/analysis/', views.ChildWalletViewSet.as_view({'get': 'analysis'}), name='children-wallets-analysis'),
+    # TRANSACTION ENDPOINTS
+    path('transactions/', TransactionViewSet.as_view({'get': 'list', 'post': 'create'}), name='transaction-list'),
+    path('transactions/<uuid:pk>/', TransactionViewSet.as_view({'get': 'retrieve'}), name='transaction-detail'),
+    path('transactions/<uuid:pk>/complete/', TransactionViewSet.as_view({'post': 'complete'}), name='transaction-complete'),
+    path('transactions/<uuid:pk>/cancel/', TransactionViewSet.as_view({'post': 'cancel'}), name='transaction-cancel'),
+    path('transactions/complete_multiple/', TransactionViewSet.as_view({'post': 'complete_multiple'}), name='transaction-complete-multiple'),
+    path('transactions/recent_activities/', TransactionViewSet.as_view({'get': 'recent_activities'}), name='transaction-recent-activities'),
 
-    path('api/allowances/', views.FamilyAllowanceViewSet.as_view({'get': 'list', 'post': 'create'}), name='allowances'),
+    # FAMILY ALLOWANCE ENDPOINTS
+    path('allowances/', AllowanceViewSet.as_view({'get': 'list', 'post': 'create'}), name='allowance-list'),
+    path('allowances/<uuid:pk>/', AllowanceViewSet.as_view({
+        'get': 'retrieve',
+        'put': 'update',
+        'patch': 'partial_update',
+        'delete': 'destroy'
+    }), name='allowance-detail'),
 ]

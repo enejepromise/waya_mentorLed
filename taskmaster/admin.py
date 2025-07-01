@@ -1,43 +1,35 @@
 from django.contrib import admin
-from .models import Task
+from .models import Chore
 
+# @admin.register(Chore)
+# class ChoreAdmin(admin.ModelAdmin):
+#     list_display = ('title', 'parent_name', 'child_name', 'status', 'due_date', 'created_at')
+#     list_filter = ('status', 'due_date', 'created_at', 'category')
+#     search_fields = (
+#         'title',
+#         'description',
+#         'assigned_to__name',
+#         'parent__full_name',  
+#     )
+#     ordering = ('-created_at',)
+#     readonly_fields = ('created_at', 'completed_at')
 
-@admin.register(Task)
-class TaskAdmin(admin.ModelAdmin):
-    list_display = (
-        'title',
-        'assigned_to',
-        'parent',
-        'reward',
-        'due_date',
-        'status',
-        'created_at',
-        'completed_at',
-    )
-    list_filter = ('status', 'due_date', 'created_at')
-    search_fields = (
-        'title',
-        'description',
-        'assigned_to__username',
-        'parent__email',
-        'parent__full_name',
-    )
-    readonly_fields = ('created_at', 'completed_at')
-    ordering = ('-created_at',)
+#     fieldsets = (
+#         (None, {
+#             'fields': ('title', 'description', 'category', 'reward')
+#         }),
+#         ('Assignment Info', {
+#             'fields': ('parent', 'assigned_to', 'due_date')
+#         }),
+#         ('Status Info', {
+#             'fields': ('status', 'created_at', 'completed_at')
+#         }),
+#     )
 
-    fieldsets = (
-        (None, {
-            'fields': (
-                'title',
-                'description',
-                'reward',
-                'due_date',
-                'assigned_to',
-                'parent',
-                'status',
-            )
-        }),
-        ('Timestamps (Read Only)', {
-            'fields': ('created_at', 'completed_at'),
-        }),
-    )
+#     def parent_name(self, obj):
+#         return obj.parent.full_name
+#     parent_name.short_description = 'Parent'
+
+#     def child_name(self, obj):
+#         return obj.assigned_to.name
+#     child_name.short_description = 'Child'

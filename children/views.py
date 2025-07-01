@@ -38,10 +38,20 @@ class ChildDetailView(generics.RetrieveAPIView):
 
 
 class ChildUpdateView(generics.UpdateAPIView):
+    """
+    PUT /api/kids/{id}/ - Update a child's account
+    """
     serializer_class = ChildUpdateSerializer
     permission_classes = [IsAuthenticated, IsParentOfChild]
     queryset = Child.objects.all()
 
+    def update(self, request, *args, **kwargs):
+        try:
+            return super().update(request, *args, **kwargs)
+        except Child.DoesNotExist:
+            return Response({"detail": "Child not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"detail": f"Server error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ChildDeleteView(generics.DestroyAPIView):
     permission_classes = [IsAuthenticated, IsParentOfChild]

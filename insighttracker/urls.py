@@ -1,6 +1,8 @@
 from django.urls import path
-from .views import DashboardView
+from .views import InsightChoreView 
 
 urlpatterns = [
-    path('dashboard/', DashboardView.as_view(), name='dashboard'),
+
+    # Chore insight analytics endpoint
+    path("chores/insights/", InsightChoreView.as_view(), name="chore-insights"),
 ]
