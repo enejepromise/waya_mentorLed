@@ -1,6 +1,6 @@
 import requests
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+#from drf_yasg.utils import swagger_auto_schema
+#from drf_yasg import openapi
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.tokens import default_token_generator
