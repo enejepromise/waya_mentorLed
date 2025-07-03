@@ -73,14 +73,16 @@ INSTALLED_APPS = [
     'insighttracker',
     'moneymaze',
     'notifications',
+    'settings_waya',
 
-    'drf_yasg',
+   # 'drf_yasg',
     'rest_framework',
+    'drf_spectacular',
     'rest_framework_simplejwt',
     'rest_framework.authtoken',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
-
+    'channels',
 
     'django.contrib.sites',  # Required for allauth(Google auto login)
     'allauth',
@@ -176,6 +178,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'waya_backend.wsgi.application'
 
+ASGI_APPLICATION = 'waya_backend.routing.application'
+
+# For in-memory development (no Redis needed for now)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('127.0.0.1', 6379)],  # Use Redis URL in production (like from Render, Railway, etc.)
+        },
+    },
+}
+
 
 if ENVIRONMENT == 'production':
 
@@ -256,6 +270,7 @@ AUTH_USER_MODEL = 'users.User'
 
 
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
@@ -341,5 +356,3 @@ LOGOUT_REDIRECT_URL = ''
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
-
-

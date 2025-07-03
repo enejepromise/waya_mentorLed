@@ -1,9 +1,13 @@
+# Ignore all env files
 .env
-DEBUG=True
-ALLOWED_HOSTS=127.0.0.1,localhost
+.env.*
 
-#for production this should be
- 
- DEBUG=False
- ALLOWED_HOSTS=domain.env 
-.env 
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+
+# Ignore test files
+tests.py
