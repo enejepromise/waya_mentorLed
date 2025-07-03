@@ -1,43 +1,43 @@
 from django.urls import path
-from familywallet import views
+from .views import (
+    FamilyWalletViewSet,
+    ChildWalletViewSet,
+    TransactionViewSet,
+    AllowanceViewSet,
+    WalletViewSet,
+)
 
 urlpatterns = [
-    # 1. Parent Wallet Overview
-    path('api/parents/wallet/', views.FamilyWalletViewSet.as_view({'get': 'retrieve'}), name='family-wallet'),
+    # FAMILY WALLET ENDPOINTS
+    path('wallet/', FamilyWalletViewSet.as_view({'get': 'list'}), name='wallet-list'),
+    path('wallet/add_funds/', FamilyWalletViewSet.as_view({'post': 'add_funds'}), name='wallet-add-funds'),
+    path('wallet/dashboard_stats/', FamilyWalletViewSet.as_view({'get': 'dashboard_stats'}), name='wallet-dashboard-stats'),
+    path('wallet/earnings_chart_data/', FamilyWalletViewSet.as_view({'get': 'earnings_chart_data'}), name='wallet-earnings-chart-data'),
+    path('wallet/savings_breakdown/', FamilyWalletViewSet.as_view({'get': 'savings_breakdown'}), name='wallet-savings-breakdown'),
+    path('wallet/transfer/', FamilyWalletViewSet.as_view({'post': 'transfer'}), name='wallet-transfer'),
 
-    # 2. Dashboard Stats
-    path('api/parents/wallet/dashboard-stats/', views.FamilyWalletViewSet.as_view({'get': 'dashboard_stats'}), name='wallet-dashboard-stats'),
+    # WALLET PIN AND PAYMENT ENDPOINTS
+    path('wallet/set_pin/', WalletViewSet.as_view({'post': 'set_pin'}), name='wallet-set-pin'),
+    path('wallet/make_payment/', WalletViewSet.as_view({'post': 'make_payment'}), name='wallet-make-payment'),
 
-    # 3. Add Funds to Wallet
-    path('api/parents/wallet/add-funds/', views.FamilyWalletViewSet.as_view({'post': 'add_funds'}), name='wallet-add-funds'),
+    # CHILD WALLET ANALYSIS
+    path('child-wallets/', ChildWalletViewSet.as_view({'get': 'list'}), name='child-wallets-list'),
+    path('child-wallets/analysis/', ChildWalletViewSet.as_view({'get': 'analysis'}), name='child-wallets-analysis'),
 
-    # 4. Earnings Chart Data
-    path('api/parents/wallet/earnings-chart/', views.FamilyWalletViewSet.as_view({'get': 'earnings_chart_data'}), name='wallet-earnings-chart'),
+    # TRANSACTION ENDPOINTS
+    path('transactions/', TransactionViewSet.as_view({'get': 'list', 'post': 'create'}), name='transaction-list'),
+    path('transactions/<uuid:pk>/', TransactionViewSet.as_view({'get': 'retrieve'}), name='transaction-detail'),
+    path('transactions/<uuid:pk>/complete/', TransactionViewSet.as_view({'post': 'complete'}), name='transaction-complete'),
+    path('transactions/<uuid:pk>/cancel/', TransactionViewSet.as_view({'post': 'cancel'}), name='transaction-cancel'),
+    path('transactions/complete_multiple/', TransactionViewSet.as_view({'post': 'complete_multiple'}), name='transaction-complete-multiple'),
+    path('transactions/recent_activities/', TransactionViewSet.as_view({'get': 'recent_activities'}), name='transaction-recent-activities'),
 
-    # 5. Savings Breakdown
-    path('api/parents/wallet/savings-breakdown/', views.FamilyWalletViewSet.as_view({'get': 'savings_breakdown'}), name='wallet-savings-breakdown'),
-
-    # 6. List All Transactions
-    path('api/parents/wallet/transactions/', views.TransactionViewSet.as_view({'get': 'list'}), name='wallet-transactions'),
-
-    # 7. Complete Transaction
-    path('api/parents/wallet/transactions/<uuid:pk>/complete/', views.TransactionViewSet.as_view({'post': 'complete'}), name='transaction-complete'),
-
-    # 8. Cancel Transaction
-    path('api/parents/wallet/transactions/<uuid:pk>/cancel/', views.TransactionViewSet.as_view({'post': 'cancel'}), name='transaction-cancel'),
-
-    # 9. Complete Multiple Transactions
-    path('api/parents/wallet/transactions/complete-multiple/', views.TransactionViewSet.as_view({'post': 'complete_multiple'}), name='transactions-complete-multiple'),
-
-    # 10. Recent Transactions
-    path('api/parents/wallet/transactions/recent/', views.TransactionViewSet.as_view({'get': 'recent_activities'}), name='transactions-recent'),
-
-    # 11. Get Child Wallets
-    path('api/parents/wallet/children-wallets/', views.ChildWalletViewSet.as_view({'get': 'list'}), name='children-wallets'),
-
-    # 12. Create Allowance
-    path('api/allowances/', views.CreateFamilyAllowanceView.as_view(), name='create-allowance'),
-
-    # 13. List Allowances
-    path('api/allowances/list/', views.ListFamilyAllowancesView.as_view(), name='list-allowances'),
+    # FAMILY ALLOWANCE ENDPOINTS
+    path('allowances/', AllowanceViewSet.as_view({'get': 'list', 'post': 'create'}), name='allowance-list'),
+    path('allowances/<uuid:pk>/', AllowanceViewSet.as_view({
+        'get': 'retrieve',
+        'put': 'update',
+        'patch': 'partial_update',
+        'delete': 'destroy'
+    }), name='allowance-detail'),
 ]

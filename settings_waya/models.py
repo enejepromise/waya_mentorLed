@@ -11,7 +11,7 @@ class NotificationSettings(models.Model):
     weekly_summary = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"NotificationSettings for {self.user.username}"
+        return f"NotificationSettings for {getattr(self.user, 'full_name', self.user.email)}"
 
 
 class RewardSettings(models.Model):
@@ -21,4 +21,4 @@ class RewardSettings(models.Model):
     allow_savings = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"RewardSettings for {self.user.username}"
+        return f"RewardSettings for {getattr(self.user, 'full_name', self.user.email)}"

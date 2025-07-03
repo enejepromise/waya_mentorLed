@@ -1,305 +1,187 @@
 import uuid
 from decimal import Decimal
-from django.db import models
+from django.db import models, transaction as db_transaction
+from django.conf import settings
 from django.utils import timezone
-from django.core.exceptions import ValidationError
-from users.models import User
-from datetime import timedelta
 from children.models import Child
+from users.models import User
+from django.contrib.auth.hashers import make_password, check_password
 
 
 class FamilyWallet(models.Model):
-    """
-    Central family wallet that holds the main family funds.
-    Each family (parent) has one main wallet.
-    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    parent = models.OneToOneField(
-        User,
-        on_delete=models.CASCADE,
-        related_name='family_wallet',
-        limit_choices_to={'role': User.ROLE_PARENT}
-    )
-    balance = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal('0.00'),
-        help_text="Main family wallet balance"
-    )
+    parent = models.OneToOneField(User, on_delete=models.CASCADE, related_name="family_wallet")
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    currency = models.CharField(max_length=10, default="Naira")
+    pin = models.CharField(max_length=128)  # hashed 4-digit PIN
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"Family Wallet - {self.parent.full_name} (${self.balance})"
+    def set_pin(self, raw_pin):
+        if not raw_pin.isdigit() or len(raw_pin) != 4:
+            raise ValueError("PIN must be exactly 4 digits.")
+        self.pin = make_password(raw_pin)
 
-    def add_funds(self, amount, description="Funds added"):
-        """Add funds to family wallet"""
+    def check_pin(self, raw_pin):
+        return check_password(raw_pin, self.pin)
+
+    def add_funds(self, amount: Decimal, description: str, created_by):
         if amount <= 0:
-            raise ValidationError("Amount must be positive")
+            raise ValueError("Amount must be positive.")
 
-        self.balance += amount
-        self.save()
+        with db_transaction.atomic():
+            self.balance += amount
+            self.save()
 
-        Transaction.objects.create(
-            family_wallet=self,
-            transaction_type=Transaction.TYPE_DEPOSIT,
-            amount=amount,
-            description=description,
-            status=Transaction.STATUS_COMPLETED
-        )
+            transaction_obj = Transaction.objects.create(
+                parent=self.parent,
+                child=None,  # No child linked for adding funds
+                type='allowance_payment',
+                amount=amount,
+                description=description,
+                status='paid',
+                created_at=timezone.now()
+            )
+        return transaction_obj
 
-    def has_sufficient_funds(self, amount):
-        """Check if wallet has sufficient funds"""
-        return self.balance >= amount
-
-
-class ChildWallet(models.Model):
-    """
-    Individual wallet for each child to track their personal savings/rewards.
-    Separate from the main family wallet.
-    """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    child = models.OneToOneField(
-        Child,
-        on_delete=models.CASCADE,
-        related_name='wallet'
-    )
-    balance = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=Decimal('0.00'),
-        help_text="Child's personal wallet balance"
-    )
-    total_earned = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=Decimal('0.00'),
-        help_text="Total amount earned by child"
-    )
-    total_spent = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=Decimal('0.00'),
-        help_text="Total amount spent by child"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.child.username}'s Wallet (${self.balance})"
-
-    def add_reward(self, amount):
-        """Add reward to child's wallet"""
+    def create_reward_transaction(self, child, amount: Decimal, description: str):
         if amount <= 0:
-            raise ValidationError("Amount must be positive")
-        self.balance += amount
-        self.total_earned += amount
-        self.save()
-
-    def spend(self, amount):
-        """Spend from child's wallet"""
-        if amount <= 0:
-            raise ValidationError("Amount must be positive")
+            raise ValueError("Amount must be positive.")
         if amount > self.balance:
-            raise ValidationError("Insufficient funds")
+            raise ValueError("Insufficient balance.")
 
-        self.balance -= amount
-        self.total_spent += amount
-        self.save()
+        with db_transaction.atomic():
+            self.balance -= amount
+            self.save()
+
+            transaction_obj = Transaction.objects.create(
+                parent=self.parent,
+                child=child,
+                type='chore_reward',
+                amount=amount,
+                description=description,
+                status='paid',
+                created_at=timezone.now()
+            )
+        return transaction_obj
+
+    def get_total_sent(self):
+        return self.parent.transactions.filter(status="paid").aggregate(
+            total=models.Sum("amount")
+        )["total"] or Decimal('0.00')
+
+    def get_total_pending(self):
+        return self.parent.transactions.filter(status="pending").aggregate(
+            total=models.Sum("amount")
+        )["total"] or Decimal('0.00')
+
+    def __str__(self):
+        return f"{self.parent.full_name}'s Wallet - {self.currency}"
 
 
 class Transaction(models.Model):
-    """
-    Records all financial transactions in the family wallet system.
-    Handles rewards, spending, deposits, and transfers.
-    """
-
-    # Transaction Types
-    TYPE_REWARD = 'reward'
-    TYPE_SPENDING = 'spending'
-    TYPE_DEPOSIT = 'deposit'
-    TYPE_TRANSFER = 'transfer'
-    TYPE_WITHDRAWAL = 'withdrawal'
-
-    TYPE_CHOICES = [
-        (TYPE_REWARD, 'Reward'),
-        (TYPE_SPENDING, 'Spending'),
-        (TYPE_DEPOSIT, 'Deposit'),
-        (TYPE_TRANSFER, 'Transfer'),
-        (TYPE_WITHDRAWAL, 'Withdrawal'),
+    STATUS_CHOICES = [
+        ("paid", "Paid"),
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("cancelled", "Cancelled"),
     ]
 
-    # Transaction Status
-    STATUS_PENDING = 'pending'
-    STATUS_COMPLETED = 'completed'
-    STATUS_CANCELLED = 'cancelled'
-    STATUS_FAILED = 'failed'
-
-    STATUS_CHOICES = [
-        (STATUS_PENDING, 'Pending'),
-        (STATUS_COMPLETED, 'Completed'),
-        (STATUS_CANCELLED, 'Cancelled'),
-        (STATUS_FAILED, 'Failed'),
+    TYPE_CHOICES = [
+        ("chore_reward", "Chore Reward"),
+        ("allowance_payment", "Allowance Payment"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-    # Relationships
-    family_wallet = models.ForeignKey(
-        FamilyWallet,
-        on_delete=models.CASCADE,
-        related_name='transactions'
-    )
-    child = models.ForeignKey(
-        Child,
-        on_delete=models.CASCADE,
-        related_name='transactions',
-        null=True,
-        blank=True,
-        help_text="Child involved in the transaction (for rewards/spending)"
-    )
-    task = models.ForeignKey(
-        'taskmaster.Task',  # ✅ Updated from 'tasks.Task' to 'taskmaster.Task'
-        on_delete=models.SET_NULL,
-        related_name='transactions',
-        null=True,
-        blank=True,
-        help_text="Task associated with reward transaction"
-    )
-
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='created_transactions',
-        help_text="User who initiated the transaction"
-    )
-
-    # Transaction Details
-    transaction_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    description = models.TextField(blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
-
-    # Timestamps
+    parent = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="transactions")
+    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name="transactions", null=True, blank=True)
+    chore = models.ForeignKey("taskmaster.Chore", null=True, blank=True, on_delete=models.SET_NULL)
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="chore_reward")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    description = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
-    class Meta:
-        ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['transaction_type', 'status']),
-            models.Index(fields=['child', 'created_at']),
-            models.Index(fields=['family_wallet', 'created_at']),
-        ]
-
-    def __str__(self):
-        child_name = self.child.username if self.child else "Family"
-        return f"{self.get_transaction_type_display()} - {child_name} - ${self.amount} ({self.status})"
-
     def complete_transaction(self):
-        """Mark transaction as completed and update wallets"""
-        if self.status != self.STATUS_PENDING:
-            raise ValidationError("Only pending transactions can be completed")
-
-        if self.transaction_type == self.TYPE_REWARD:
-            if not self.family_wallet.has_sufficient_funds(self.amount):
-                raise ValidationError("Insufficient funds in family wallet")
-
-            self.family_wallet.balance -= self.amount
-            self.family_wallet.save()
-
-            if self.child:
-                child_wallet, _ = ChildWallet.objects.get_or_create(child=self.child)
-                child_wallet.add_reward(self.amount)
-
-        elif self.transaction_type == self.TYPE_SPENDING:
-            if self.child:
-                child_wallet = self.child.wallet
-                child_wallet.spend(self.amount)
-
-        self.status = self.STATUS_COMPLETED
+        if self.status != 'pending':
+            raise ValueError("Only pending transactions can be completed.")
+        self.status = 'paid'
         self.completed_at = timezone.now()
         self.save()
 
     def cancel_transaction(self):
-        """Cancel a pending transaction"""
-        if self.status != self.STATUS_PENDING:
-            raise ValidationError("Only pending transactions can be cancelled")
-
-        self.status = self.STATUS_CANCELLED
+        if self.status not in ['pending', 'processing']:
+            raise ValueError("Only pending or processing transactions can be cancelled.")
+        self.status = 'cancelled'
         self.save()
 
-
-class TransactionCategory(models.Model):
-    """
-    Categories for organizing transactions (optional enhancement)
-    """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
-    color = models.CharField(max_length=7, default='#000000', help_text="Hex color code")
-    parent = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='transaction_categories',
-        limit_choices_to={'role': User.ROLE_PARENT}
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name_plural = "Transaction Categories"
-        unique_together = ['name', 'parent']
-
     def __str__(self):
-        return self.name
-    
-class FamilyAllowance(models.Model):
-    """
-    Represents an allowance schedule from a parent to a child.
-    """
+        child_name = self.child.name if self.child else "No Child"
+        return f"{self.type} - {child_name} - ₦{self.amount}"
+
+
+class Allowance(models.Model):
     FREQUENCY_CHOICES = [
-        ('daily', 'Daily'),
-        ('weekly', 'Weekly'),
-        ('monthly', 'Monthly'),
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
     ]
 
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('active', 'Active'),
-        ('paused', 'Paused'),
-        ('cancelled', 'Cancelled'),
+        ("active", "Active"),
+        ("paused", "Paused"),
+        ("pending", "Pending"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name='allowances')
-    parent = models.ForeignKey(User, on_delete=models.CASCADE, related_name='allowances')
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
-    createdAt = models.DateTimeField(auto_now_add=True)
-    lastPaidAt = models.DateTimeField(null=True, blank=True)
-    nextPaymentDate = models.DateTimeField(blank=True)
-
-    class Meta:
-        unique_together = ['child', 'parent', 'frequency']
+    parent = models.ForeignKey(User, on_delete=models.CASCADE, related_name="allowances")
+    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name="allowances")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_paid_at = models.DateTimeField(null=True, blank=True)
+    next_payment_date = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"{self.parent.full_name} - {self.child.username} ({self.frequency})"
+        return f"{self.child.name} - {self.amount} ({self.frequency})"
 
-    def save(self, *args, **kwargs):
-        # Automatically calculate next payment date on creation
-        if not self.nextPaymentDate:
-            self.nextPaymentDate = self.calculate_next_payment()
-        super().save(*args, **kwargs)
+    def schedule_next_payment(self):
+        if self.last_paid_at is None:
+            return None
+        if self.frequency == "weekly":
+            return self.last_paid_at + timezone.timedelta(weeks=1)
+        elif self.frequency == "monthly":
+            return self.last_paid_at + timezone.timedelta(days=30)
+        return None
 
-    def calculate_next_payment(self):
-        now = timezone.now()
-        if self.frequency == 'daily':
-            return now + timedelta(days=1)
-        elif self.frequency == 'weekly':
-            return now + timedelta(weeks=1)
-        elif self.frequency == 'monthly':
-            return now + timedelta(days=30)
-        return now
+
+class ChildWallet(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    child = models.OneToOneField(Child, on_delete=models.CASCADE, related_name="wallet")
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_earned = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_spent = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    savings_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal('0.00'),
+        help_text="Percentage of each income to be saved automatically"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def earn(self, amount: Decimal):
+        savings = amount * (self.savings_rate / Decimal('100'))
+        spendable = amount - savings
+        self.balance += spendable
+        self.total_earned += amount
+        self.save()
+
+    def spend(self, amount: Decimal):
+        if amount > self.balance:
+            raise ValueError("Insufficient balance")
+        self.balance -= amount
+        self.total_spent += amount
+        self.save()
+
+    def __str__(self):
+        return f"{self.child.name}'s Wallet"

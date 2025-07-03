@@ -1,151 +1,157 @@
 from rest_framework import serializers
 from decimal import Decimal
-from django.db.models import Sum
-from .models import FamilyWallet, ChildWallet, Transaction
+from .models import FamilyWallet, ChildWallet, Transaction, Allowance
 from children.models import Child
-from .models import FamilyAllowance
-from users.models import User
+from django.db import transaction as db_transaction
 
 
-# --- BASIC SERIALIZERS ---
 
-class ChildBasicSerializer(serializers.ModelSerializer):
-    """Basic serializer for Child model."""
-    
+# Family Wallet Serializer
+class FamilyWalletSerializer(serializers.ModelSerializer):
+    parent_id = serializers.UUIDField(source='parent.id', read_only=True)
+
     class Meta:
-        model = Child
-        fields = ['id', 'username', 'avatar']
-        read_only_fields = ['id']
+        model = FamilyWallet
+        fields = ['id', 'parent_id', 'balance', 'currency', 'updated_at']
+        read_only_fields = fields
 
 
-class UserBasicSerializer(serializers.ModelSerializer):
-    """Basic serializer for User model."""
-    
+# Add Funds Serializer
+class AddFundsSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    description = serializers.CharField(max_length=255)
+
+    def validate_amount(self, value):
+        if value <= Decimal('0.00'):
+            raise serializers.ValidationError("Amount must be positive.")
+        return value
+
+
+# Wallet PIN Serializer
+class WalletPinSerializer(serializers.Serializer):
+    pin = serializers.CharField(min_length=4, max_length=4)
+
+    def validate_pin(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError("PIN must be exactly 4 digits.")
+        return value
+
+
+# Child Wallet Serializer
+class ChildWalletSerializer(serializers.ModelSerializer):
+    child_name = serializers.CharField(source='child.name', read_only=True)
+
     class Meta:
-        model = User
-        fields = ['id', 'full_name', 'avatar']
-        read_only_fields = ['id']
+        model = ChildWallet
+        fields = ['id', 'child_name', 'balance', 'total_earned', 'total_spent', 'savings_rate']
+        read_only_fields = fields
 
-# --- TRANSACTION SERIALIZER (CRUD SUPPORTED) ---
 
+# Transaction Serializer
 class TransactionSerializer(serializers.ModelSerializer):
-    """Handles create/read/update for Transaction model."""
-    
-    child = ChildBasicSerializer(read_only=True)
-    child_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
-    created_by = UserBasicSerializer(read_only=True)
-
-    transaction_type_display = serializers.CharField(source='get_transaction_type_display', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    family_wallet_id = serializers.UUIDField(source='parent.family_wallet.id', read_only=True)
+    child_id = serializers.UUIDField(source='child.id', read_only=True)
 
     class Meta:
         model = Transaction
         fields = [
-            'id', 'transaction_type', 'transaction_type_display', 'amount',
-            'description', 'status', 'status_display', 'child', 'child_id',
-            'created_by', 'created_at', 'completed_at'
+            'id', 'family_wallet_id', 'child_id',
+            'type', 'amount', 'status',
+            'description', 'created_at', 'completed_at'
         ]
-        read_only_fields = ['id', 'created_at', 'completed_at', 'created_by']
+        read_only_fields = fields
 
-    def validate_amount(self, value):
-        """Ensure amount is positive."""
-        if value <= 0:
-            raise serializers.ValidationError("Amount must be positive.")
-        return value
 
-    def validate(self, attrs):
-        """Cross-field validation to ensure child is linked when needed."""
-        transaction_type = attrs.get('transaction_type')
-        child_id = attrs.get('child_id')
+# Complete Multiple Transactions Serializer
+class CompleteTransactionSerializer(serializers.Serializer):
+    transaction_ids = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=False
+    )
 
-        if transaction_type in [Transaction.TYPE_REWARD, Transaction.TYPE_SPENDING] and not child_id:
-            raise serializers.ValidationError(f"{transaction_type.title()} transactions require a child.")
-        
-        return attrs
+
+# Make Payment Serializer
+class MakePaymentSerializer(serializers.Serializer):
+    child_id = serializers.UUIDField()
+    chore_id = serializers.UUIDField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    pin = serializers.CharField(max_length=4)
+
+    def validate(self, data):
+        user = self.context['request'].user
+        try:
+            wallet = FamilyWallet.objects.get(parent=user)
+        except FamilyWallet.DoesNotExist:
+            raise serializers.ValidationError("Family wallet not found.")
+
+        if not wallet.check_pin(data['pin']):
+            raise serializers.ValidationError("Invalid PIN.")
+
+        if wallet.balance < data['amount']:
+            raise serializers.ValidationError("Insufficient wallet balance.")
+
+        try:
+            child = Child.objects.get(id=data['child_id'], parent=user)
+        except Child.DoesNotExist:
+            raise serializers.ValidationError("Invalid child.")
+
+        data['wallet'] = wallet
+        data['child'] = child
+        return data
 
     def create(self, validated_data):
-        """Create a Transaction with relationships to child and creator."""
-        user = self.context['request'].user
-        validated_data['created_by'] = user
-        validated_data['family_wallet'] = getattr(user, 'family_wallet', None)
+        wallet = validated_data['wallet']
+        child = validated_data['child']
+        amount = validated_data['amount']
+        chore_id = validated_data['chore_id']
 
-        child_id = validated_data.pop('child_id', None)
-        if child_id:
-            try:
-                validated_data['child'] = Child.objects.get(id=child_id)
-            except Child.DoesNotExist:
-                raise serializers.ValidationError("Child not found.")
+        # Deduct balance and create transaction atomically
+        with db_transaction.atomic():
+            wallet.balance -= amount
+            wallet.save()
 
-        return super().create(validated_data)
-
-
-# --- CHILD WALLET SERIALIZER ---
-
-class ChildWalletSerializer(serializers.ModelSerializer):
-    """Serializer for a child's wallet."""
-    
-    child = ChildBasicSerializer(read_only=True)
-    savings_rate = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
-    recent_transactions = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ChildWallet
-        fields = [
-            'id', 'child', 'balance', 'total_earned', 'total_spent',
-            'savings_rate', 'created_at', 'updated_at',
-            'recent_transactions'
-        ]
-        read_only_fields = [
-            'id', 'balance', 'total_earned', 'total_spent',
-            'created_at', 'updated_at'
-        ]
-
-    def get_recent_transactions(self, obj):
-        """Return last 5 transactions."""
-        recent = obj.child.transactions.all()[:5]
-        return TransactionSerializer(recent, many=True, context=self.context).data
+            txn = Transaction.objects.create(
+                parent=wallet.parent,
+                child=child,
+                chore_id=chore_id,
+                amount=amount,
+                type='chore_reward',
+                status='paid',
+                description=f"Reward for chore {chore_id}"
+            )
+        return txn
 
 
-# --- FAMILY WALLET SERIALIZER ---
-
-class FamilyWalletSerializer(serializers.ModelSerializer):
-    """Serializer for the family wallet overview."""
-
-    parent = UserBasicSerializer(read_only=True)
-    total_rewards_sent = serializers.SerializerMethodField()
-    total_rewards_pending = serializers.SerializerMethodField()
-    children_wallets = serializers.SerializerMethodField()
-    recent_transactions = serializers.SerializerMethodField()
+# Savings Activity Breakdown Serializer
+class SavingsActivitySerializer(serializers.ModelSerializer):
+    child_name = serializers.CharField(source='child.name', read_only=True)
+    activity = serializers.CharField(source='chore.title', default="Allowance")
+    formatted_date = serializers.SerializerMethodField()
 
     class Meta:
-        model = FamilyWallet
-        fields = [
-            'id', 'parent', 'balance', 'created_at', 'updated_at',
-            'total_rewards_sent', 'total_rewards_pending', 'children_wallets',
-            'recent_transactions'
-        ]
-        read_only_fields = ['id', 'parent', 'created_at', 'updated_at']
+        model = Transaction
+        fields = ['child_name', 'activity', 'amount', 'status', 'formatted_date']
 
-    def get_total_rewards_sent(self, obj):
-        return obj.get_total_rewards_sent()
-
-    def get_total_rewards_pending(self, obj):
-        return obj.get_total_rewards_pending()
-
-    def get_children_wallets(self, obj):
-        wallets = ChildWallet.objects.for_parent(obj.parent)
-        return ChildWalletSerializer(wallets, many=True, context=self.context).data
-
-    def get_recent_transactions(self, obj):
-        transactions = obj.transactions.all()[:10]
-        return TransactionSerializer(transactions, many=True, context=self.context).data
+    def get_formatted_date(self, obj):
+        return obj.created_at.strftime("%d-%B-%Y")
 
 
-# --- DASHBOARD STATS SERIALIZER ---
+# Reward Pie Chart Serializer
+class RewardPieChartSerializer(serializers.Serializer):
+    saved = serializers.DecimalField(max_digits=12, decimal_places=2)
+    sent = serializers.DecimalField(max_digits=12, decimal_places=2)
 
+
+# Daily Earning Bar Chart Serializer
+class DailyEarningSerializer(serializers.Serializer):
+    date = serializers.CharField()
+    highest_earner = serializers.CharField()
+    highest_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    lowest_earner = serializers.CharField()
+    lowest_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+# Dashboard Stats Serializer
 class DashboardStatsSerializer(serializers.Serializer):
-    """Serializer for summarizing dashboard metrics."""
-    
     family_wallet_balance = serializers.DecimalField(max_digits=12, decimal_places=2)
     total_rewards_sent = serializers.DecimalField(max_digits=12, decimal_places=2)
     total_rewards_pending = serializers.DecimalField(max_digits=12, decimal_places=2)
@@ -153,91 +159,33 @@ class DashboardStatsSerializer(serializers.Serializer):
     total_children_balance = serializers.DecimalField(max_digits=12, decimal_places=2)
 
 
-# --- ADD FUNDS ---
+# Allowance Serializer
+class AllowanceSerializer(serializers.ModelSerializer):
+    parent_id = serializers.UUIDField(source='parent.id', read_only=True)
+    child_id = serializers.UUIDField(source='child.id')
 
-class AddFundsSerializer(serializers.Serializer):
-    """Serializer for adding funds to a wallet."""
-    
-    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
-    description = serializers.CharField(max_length=255, required=False, default="Funds added")
-
-    def validate_amount(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("Amount must be positive.")
-        return value
-
-
-# --- COMPLETE TRANSACTIONS ---
-
-class CompleteTransactionSerializer(serializers.Serializer):
-    """Mark one or more transactions as complete."""
-    
-    transaction_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        min_length=1,
-        max_length=50
-    )
-
-
-# --- CREATE REWARD ---
-
-class CreateRewardTransactionSerializer(serializers.Serializer):
-    """Create a reward transaction for a child."""
-    
-    child_id = serializers.UUIDField()
-    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'))
-    description = serializers.CharField(max_length=255)
-    task_id = serializers.UUIDField(required=False, allow_null=True)
+    class Meta:
+        model = Allowance
+        fields = [
+            'id', 'parent_id', 'child_id',
+            'amount', 'frequency', 'status',
+            'created_at', 'last_paid_at', 'next_payment_date'
+        ]
+        read_only_fields = ['id', 'parent_id', 'created_at', 'last_paid_at', 'next_payment_date']
 
     def validate_child_id(self, value):
         user = self.context['request'].user
-        if not Child.objects.filter(id=value, parent=user).exists():
+        try:
+            Child.objects.get(id=value, parent=user)
+        except Child.DoesNotExist:
             raise serializers.ValidationError("Child not found or does not belong to you.")
         return value
-
-    def validate_task_id(self, value):
-        # Placeholder for Task validation logic
-        return value
-
-
-# --- CREATE SPENDING ---
-
-class CreateSpendingTransactionSerializer(serializers.Serializer):
-    """Create a spending request from a child."""
-    
-    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'))
-    description = serializers.CharField(max_length=255)
-
-    def validate(self, data):
-        user = self.context['request'].user
-        child_wallet = getattr(user, 'child_profile', None).wallet
-        if not child_wallet:
-            raise serializers.ValidationError("Wallet not found for this child.")
-        if data['amount'] > child_wallet.balance:
-            raise serializers.ValidationError("Insufficient funds in your wallet.")
-        return data
-
-class FamilyAllowanceSerializer(serializers.ModelSerializer):
-    childId = serializers.UUIDField(source='child.id')
-    parentId = serializers.UUIDField(source='parent.id', read_only=True)
-
-    class Meta:
-        model = FamilyAllowance
-        fields = [
-            'id', 'childId', 'parentId', 'amount', 'frequency', 'status',
-            'created_at', 'last_paid_at', 'next_payment_date'
-        ]
-        read_only_fields = ['id', 'created_at', 'last_paid_at', 'next_payment_date', 'parentId']
-
-    def validate(self, attrs):
-        request = self.context['request']
-        parent = request.user
-        child = Child.objects.filter(id=attrs['child']['id'], parent=parent).first()
-        if not child:
-            raise serializers.ValidationError("Child not found or does not belong to you.")
-        return attrs
 
     def create(self, validated_data):
-        validated_data['parent'] = self.context['request'].user
-        validated_data['child'] = Child.objects.get(id=validated_data['child']['id'])
-        return FamilyAllowance.objects.create(**validated_data)
+        child = Child.objects.get(id=validated_data.pop('child')['id'])
+        allocation = Allowance.objects.create(
+            parent=self.context['request'].user,
+            child=child,
+            **validated_data
+        )
+        return allocation

@@ -4,6 +4,10 @@ from django.conf import settings
 
 @shared_task
 def send_verification_email_async(subject, message, recipient_list):
+    """
+    Send verification email asynchronously.
+    Typically used during chore app signup or parent email verification.
+    """
     send_mail(
         subject,
         message,
@@ -14,7 +18,11 @@ def send_verification_email_async(subject, message, recipient_list):
 
 
 @shared_task
-def send_email_task(subject, recipient_email, message):
+def send_chore_email(subject, recipient_email, message):
+    """
+    Send chore-related notification email (when a child completes a chore).
+
+    """
     send_mail(
         subject,
         message,

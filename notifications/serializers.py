@@ -2,18 +2,23 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from users.models import User
 from children.models import Child
-from .models import NotificationSettings, RewardSettings
+from .models import Notification, Reward
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source='user.email', read_only=True)
+    full_name = serializers.CharField(source='user.full_name', read_only=True)
+
     class Meta:
         model = User
-        fields = ['avatar', 'full_name', 'email', 'family_name']
-        read_only_fields = ['email']  
+        fields = ['avatar', 'full_name', 'email']
+
 
 class ChildSerializer(serializers.ModelSerializer):
     class Meta:
         model = Child
-        fields = ['id', 'name', 'username', 'avatar', 'family_name']
+        fields = ['id', 'username', 'avatar']  # Include the fields you want to expose
+
 
 class PasswordResetSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)
@@ -26,19 +31,24 @@ class PasswordResetSerializer(serializers.Serializer):
         validate_password(data['new_password'])
         return data
 
-class NotificationSettingSerializer(serializers.ModelSerializer):
+class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
-        model = NotificationSettings
+        model = Notification
         fields = [
-            'chore_completion',
-            'reward_redemption',
-            'chore_reminder',
-            'weekly_summary'
+            "id",
+            "type",
+            "title",
+            "message",
+            "is_read",
+            "created_at",
+            "related_id",
         ]
 
-class RewardSettingSerializer(serializers.ModelSerializer):
+
+
+class RewardSerializer(serializers.ModelSerializer):
     class Meta:
-        model = RewardSettings
+        model = Reward
         fields = [
             'reward_approval_required',
             'max_daily_reward',

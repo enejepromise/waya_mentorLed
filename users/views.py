@@ -1,4 +1,6 @@
 import requests
+# from drf_yasg.utils import swagger_auto_schema
+# from drf_yasg import openapi
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
@@ -11,7 +13,6 @@ from .utils import send_email
 from django.utils.encoding import force_str, force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.contrib.sites.shortcuts import get_current_site
-
 from rest_framework import generics, status, permissions
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -40,6 +41,11 @@ User = get_user_model()
 
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
+    # @swagger_auto_schema(
+    #     operation_description="Register a new user",
+    #     request_body=UserRegistrationSerializer,
+    #     responses={201: "Registration successful"},
+    # )
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -70,7 +76,7 @@ class UserRegistrationView(generics.CreateAPIView):
                     #     fail_silently=False,
                     # )
 
-                    # ✅ SendGrid implementation
+                    # SendGrid implementation
                     send_email(
                         subject="Verify Your Waya Account",
                         message=f"Click the link to verify your email: {verification_link}",
@@ -89,10 +95,42 @@ class UserRegistrationView(generics.CreateAPIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class UserLoginView(generics.GenericAPIView):
     serializer_class = UserLoginSerializer
     permission_classes = [AllowAny]
 
+    # @extend_schema(
+    #     summary="User Login",
+    #     description="Authenticates a user with email and password, returning access and refresh tokens upon successful login.",
+    #     request=UserLoginSerializer, # Defines the expected request body
+    #     responses={
+    #         200: UserLoginResponseSerializer, # Defines the successful (200 OK) response body
+    #         401: {
+    #             'description': 'Unauthorized - Invalid credentials',
+    #             'examples': {
+    #                 'Invalid Credentials': OpenApiExample(
+    #                     'Error Example',
+    #                     value={"detail": "Invalid credentials"},
+    #                     response_only=True,
+    #                     media_type="application/json",
+    #                 )
+    #             }
+    #         },
+    #         403: {
+    #             'description': 'Forbidden - Email not verified',
+    #             'examples': {
+    #                 'Email Not Verified': OpenApiExample(
+    #                     'Verification Error Example',
+    #                     value={"detail": "Email not verified. Please verify your email before logging in."},
+    #                     response_only=True,
+    #                     media_type="application/json",
+    #                 )
+    #             }
+    #         },
+    #     },
+    #     tags=['Authentication', 'Users'], # Optional: Helps organize in Swagger UI
+    # )
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -103,26 +141,70 @@ class UserLoginView(generics.GenericAPIView):
         )
 
         if user:
+            if not user.is_verified:
+                return Response(
+                    {"detail": "Email not verified. Please verify your email before logging in."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             refresh = RefreshToken.for_user(user)
-            return Response({
+            # Make sure this dictionary perfectly matches your UserLoginResponseSerializer
+            response_data = {
                 'id': str(user.id),
                 'name': user.full_name,
                 'email': user.email,
                 'avatar': user.avatar.url if user.avatar else None,
                 'token': str(refresh.access_token),
                 'refresh': str(refresh),
-            }, status=status.HTTP_200_OK)
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
 
         return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+
+
+def post(self, request):
+    serializer = self.get_serializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    user = authenticate(
+        email=serializer.validated_data['email'],
+        password=serializer.validated_data['password']
+    )
+
+    if user:
+        if not user.is_verified:
+            return Response(
+                {"detail": "Email not verified. Please verify your email before logging in."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'id': str(user.id),
+            'name': user.full_name,
+            'email': user.email,
+            'avatar': user.avatar.url if user.avatar else None,
+            'token': str(refresh.access_token),
+            'refresh': str(refresh),
+        }, status=status.HTTP_200_OK)
+
+    return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class PasswordChangeView(generics.UpdateAPIView):
     serializer_class = PasswordChangeSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    # @swagger_auto_schema(
+    #     operation_description="Change password for logged-in user",
+    #     request_body=PasswordChangeSerializer,
+    #     responses={200: "Password changed successfully"},
+    # )
+
     def get_object(self):
         return self.request.user
-
 
 class PasswordResetRequestView(generics.GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
@@ -132,12 +214,17 @@ class PasswordResetRequestView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(request=request)
-        return Response({"message": "Password reset email sent if the email is registered."})
-
+        return Response({"message": "Password reset email sent successfully."}, status=status.HTTP_200_OK)
 
 class PasswordResetConfirmView(generics.GenericAPIView):
     serializer_class = PasswordResetConfirmSerializer
     permission_classes = [AllowAny]
+
+    # @swagger_auto_schema(
+    #     operation_description="Reset password with token and UID",
+    #     request_body=PasswordResetConfirmSerializer,
+    #     responses={200: "Password has been reset successfully"},
+    # )
 
     def post(self, request, uidb64, token):
         try:
@@ -158,6 +245,12 @@ class PasswordResetConfirmView(generics.GenericAPIView):
 class EmailVerificationView(APIView):
     serializer_class = EmailVerificationSerializer
     permission_classes = [AllowAny]
+
+    # @swagger_auto_schema(
+    #     operation_description="Verify user email using uidb64 and token",
+    #     request_body=EmailVerificationSerializer,
+    #     responses={200: "Email verified successfully!", 400: "Invalid or expired token"},
+    # )
 
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
@@ -188,6 +281,12 @@ class ForgotPasswordView(generics.GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
     permission_classes = [AllowAny]
 
+    # @swagger_auto_schema(
+    #     operation_description="Request password reset email",
+    #     request_body=PasswordResetRequestSerializer,
+    #     responses={200: openapi.Response('Password reset email sent')}
+    # )
+
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -197,6 +296,12 @@ class ForgotPasswordView(generics.GenericAPIView):
 class ResetPasswordConfirmView(generics.GenericAPIView):
     serializer_class = PasswordResetConfirmSerializer
     permission_classes = [AllowAny]
+
+    # @swagger_auto_schema(
+    #     operation_description="Reset password with token and UID",
+    #     request_body=PasswordResetConfirmSerializer,
+    #     responses={200: openapi.Response('Password has been reset successfully')}
+    # )
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data, context={'user': None})
@@ -211,6 +316,29 @@ def home(request):
 
 class GoogleLoginView(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
+
+    # @swagger_auto_schema(
+    #     operation_description="Login with Google OAuth2 access token",
+    #     request_body=openapi.Schema(
+    #         type=openapi.TYPE_OBJECT,
+    #         required=['access_token'],
+    #         properties={
+    #             'access_token': openapi.Schema(type=openapi.TYPE_STRING, description='Google OAuth2 access token'),
+    #         },
+    #     ),
+    #     responses={
+    #         200: openapi.Response('Login successful', schema=openapi.Schema(
+    #             type=openapi.TYPE_OBJECT,
+    #             properties={
+    #                 'detail': openapi.Schema(type=openapi.TYPE_STRING),
+    #                 'user_id': openapi.Schema(type=openapi.TYPE_STRING),
+    #                 'email': openapi.Schema(type=openapi.TYPE_STRING),
+    #             }
+    #         )),
+    #         400: 'Bad request',
+    #         403: 'Forbidden',
+    #     }
+    # )
 
     def post(self, request, *args, **kwargs):
         access_token = request.data.get("access_token")
@@ -273,6 +401,22 @@ class GoogleLoginView(SocialLoginView):
 
 
 class ResendVerificationEmailView(APIView):
+
+    # @swagger_auto_schema(
+    #     operation_description="Resend verification email to user",
+    #     request_body=openapi.Schema(
+    #         type=openapi.TYPE_OBJECT,
+    #         required=['email'],
+    #         properties={
+    #             'email': openapi.Schema(type=openapi.TYPE_STRING, format='email', description='User email address'),
+    #         },
+    #     ),
+    #     responses={
+    #         200: openapi.Response('Verification email resent'),
+    #         400: 'Bad request',
+    #         404: 'User not found',
+    #     }
+    # )
     def post(self, request):
         email = request.data.get("email")
         try:

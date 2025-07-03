@@ -1,43 +1,12 @@
 from django.contrib import admin
-from .models import Task
+from .models import Chore
 
-
-@admin.register(Task)
-class TaskAdmin(admin.ModelAdmin):
+@admin.register(Chore)
+class ChoreAdmin(admin.ModelAdmin):
     list_display = (
-        'title',
-        'assigned_to',
-        'parent',
-        'reward',
-        'due_date',
-        'status',
-        'created_at',
-        'completed_at',
+        'title', 'assigned_to', 'parent', 'status', 'due_date', 'reward', 'category', 'created_at', 'completed_at'
     )
-    list_filter = ('status', 'due_date', 'created_at')
-    search_fields = (
-        'title',
-        'description',
-        'assigned_to__username',
-        'parent__email',
-        'parent__full_name',
-    )
-    readonly_fields = ('created_at', 'completed_at')
+    list_filter = ('status', 'category', 'due_date')
+    search_fields = ('title', 'description', 'assigned_to__username', 'parent__email')
     ordering = ('-created_at',)
-
-    fieldsets = (
-        (None, {
-            'fields': (
-                'title',
-                'description',
-                'reward',
-                'due_date',
-                'assigned_to',
-                'parent',
-                'status',
-            )
-        }),
-        ('Timestamps (Read Only)', {
-            'fields': ('created_at', 'completed_at'),
-        }),
-    )
+    readonly_fields = ('created_at', 'completed_at')

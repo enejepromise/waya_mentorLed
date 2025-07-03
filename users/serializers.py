@@ -5,6 +5,12 @@ from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from allauth.account import app_settings
 from users.models import EmailVerification
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
+from django.conf import settings
+from users.utils import send_email
+
 
 User = get_user_model()
 
@@ -88,11 +94,33 @@ class PasswordChangeSerializer(serializers.Serializer):
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
-    def validate_email(self, value):
-        if not User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(_("User with this email does not exist."))
-        return value
+    def create(self, validated_data):
+        email = validated_data['email']
+        request = self.context.get('request')
 
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Always return success for security reasons
+            return {}
+
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        domain = getattr(settings, 'DOMAIN', None) or request.get_host()
+
+        # Change this to match your frontend route for resetting passwords
+        reset_link = f"https://{domain}/auth/reset-password-confirm/?uidb64={uid}&token={token}"
+
+        try:
+            send_email(
+                subject="Reset Your Waya Password",
+                message=f"Hello {user.full_name},\n\nClick the link to reset your password:\n{reset_link}\n\nIf you didn't request this, ignore this email.",
+                to_email=user.email
+            )
+        except Exception as e:
+            raise serializers.ValidationError({"email": f"Failed to send reset email: {str(e)}"})
+
+        return {}
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
     new_password1 = serializers.CharField(write_only=True, required=True)

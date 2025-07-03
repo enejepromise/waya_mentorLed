@@ -71,7 +71,10 @@ INSTALLED_APPS = [
     'taskmaster',
     'familywallet',
     'insighttracker',
-    'settings_waya',
+    'moneymaze',
+    'notifications',
+
+    'drf_yasg',
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework.authtoken',
