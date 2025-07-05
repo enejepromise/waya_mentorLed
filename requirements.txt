@@ -61,7 +61,8 @@ requests==2.32.3
 requests-oauthlib==2.0.0
 rpds-py==0.26.0
 rsa==4.9.1
-sendgrid==6.12.2
+sendgrid==3.6.5
+sendgrid-django==4.2.0
 setuptools==80.7.1
 setuptools-scm==8.3.1
 six==1.17.0

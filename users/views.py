@@ -100,37 +100,6 @@ class UserLoginView(generics.GenericAPIView):
     serializer_class = UserLoginSerializer
     permission_classes = [AllowAny]
 
-    # @extend_schema(
-    #     summary="User Login",
-    #     description="Authenticates a user with email and password, returning access and refresh tokens upon successful login.",
-    #     request=UserLoginSerializer, # Defines the expected request body
-    #     responses={
-    #         200: UserLoginResponseSerializer, # Defines the successful (200 OK) response body
-    #         401: {
-    #             'description': 'Unauthorized - Invalid credentials',
-    #             'examples': {
-    #                 'Invalid Credentials': OpenApiExample(
-    #                     'Error Example',
-    #                     value={"detail": "Invalid credentials"},
-    #                     response_only=True,
-    #                     media_type="application/json",
-    #                 )
-    #             }
-    #         },
-    #         403: {
-    #             'description': 'Forbidden - Email not verified',
-    #             'examples': {
-    #                 'Email Not Verified': OpenApiExample(
-    #                     'Verification Error Example',
-    #                     value={"detail": "Email not verified. Please verify your email before logging in."},
-    #                     response_only=True,
-    #                     media_type="application/json",
-    #                 )
-    #             }
-    #         },
-    #     },
-    #     tags=['Authentication', 'Users'], # Optional: Helps organize in Swagger UI
-    # )
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -140,16 +109,16 @@ class UserLoginView(generics.GenericAPIView):
             password=serializer.validated_data['password']
         )
 
-        if user:
-            if not user.is_verified:
-                return Response(
-                    {"detail": "Email not verified. Please verify your email before logging in."},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        # if user:
+        #     if not user.is_verified:
+        #         return Response(
+        #             {"detail": "Email not verified. Please verify your email before logging in."},
+        #             status=status.HTTP_403_FORBIDDEN
+        #         )
 
-            refresh = RefreshToken.for_user(user)
+        refresh = RefreshToken.for_user(user)
             # Make sure this dictionary perfectly matches your UserLoginResponseSerializer
-            response_data = {
+        response_data = {
                 'id': str(user.id),
                 'name': user.full_name,
                 'email': user.email,
@@ -157,7 +126,7 @@ class UserLoginView(generics.GenericAPIView):
                 'token': str(refresh.access_token),
                 'refresh': str(refresh),
             }
-            return Response(response_data, status=status.HTTP_200_OK)
+        return Response(response_data, status=status.HTTP_200_OK)
 
         return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 

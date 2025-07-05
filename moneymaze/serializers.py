@@ -11,7 +11,7 @@ from .models import (
 class ConceptSerializer(serializers.ModelSerializer):
     class Meta:
         model = Concept
-        fields = ['id', 'title', 'description', 'video_url', 'level']
+        fields = ['id', 'title', 'description','level']
 
     def validate_title(self, value):
         if Concept.objects.filter(title__iexact=value.strip()).exists():
@@ -67,7 +67,7 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
 class QuizSerializer(serializers.ModelSerializer):
-    questions = QuestionSerializer(many=True, read_only=True)  # Removed redundant source='questions'
+    questions = QuestionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Quiz
@@ -75,11 +75,40 @@ class QuizSerializer(serializers.ModelSerializer):
 
 
 class QuizSubmissionSerializer(serializers.Serializer):
-    quiz_id = serializers.IntegerField()
+    quiz_id = serializers.UUIDField()
     answers = serializers.DictField(
-        child=serializers.IntegerField(),
-        help_text="question_id: answer_choice_id"
+        child=serializers.UUIDField(),
+        help_text="Mapping of question_id to answer_choice_id"
     )
+
+    def validate(self, data):
+        quiz_id = data.get('quiz_id')
+        answers = data.get('answers')
+
+        # Validate quiz exists
+        try:
+            quiz = Quiz.objects.get(id=quiz_id)
+        except Quiz.DoesNotExist:
+            raise serializers.ValidationError("Quiz does not exist.")
+
+        # Validate all question_ids belong to quiz
+        quiz_question_ids = set(quiz.questions.values_list('id', flat=True))
+        submitted_question_ids = set(answers.keys())
+
+        if not submitted_question_ids.issubset(quiz_question_ids):
+            raise serializers.ValidationError("One or more questions do not belong to the quiz.")
+
+        # Validate answer choices belong to respective questions
+        for question_id, answer_choice_id in answers.items():
+            try:
+                answer_choice = AnswerChoice.objects.get(id=answer_choice_id)
+            except AnswerChoice.DoesNotExist:
+                raise serializers.ValidationError(f"Answer choice {answer_choice_id} does not exist.")
+
+            if str(answer_choice.question_id) != question_id:
+                raise serializers.ValidationError(f"Answer choice {answer_choice_id} does not belong to question {question_id}.")
+
+        return data
 
 
 class QuizResultSerializer(serializers.ModelSerializer):
@@ -94,7 +123,7 @@ class QuizResultSerializer(serializers.ModelSerializer):
 class RewardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reward
-        fields = ['id', 'name', 'description', 'image', 'points_required']
+        fields = ['id', 'concept', 'name', 'description', 'image', 'points_required']
 
 
 class RewardEarnedSerializer(serializers.ModelSerializer):

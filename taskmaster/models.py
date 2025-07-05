@@ -22,7 +22,7 @@ class Chore(models.Model):
     reward = models.DecimalField(max_digits=10, decimal_places=2)
     category = models.CharField(max_length=50, default='Household') 
     due_date = models.DateField()
-    
+    is_redeemed = models.BooleanField(default=False)
     # Align with Child model
     assigned_to = models.ForeignKey(
         Child,

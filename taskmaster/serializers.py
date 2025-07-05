@@ -63,6 +63,7 @@ class ChoreReadSerializer(serializers.ModelSerializer):
     createdAt = serializers.DateTimeField(source='created_at')
     completedAt = serializers.DateTimeField(source='completed_at')
     category = serializers.CharField(required=False)
+    isRedeemed = serializers.BooleanField(source='is_redeemed') 
 
     class Meta:
         model = Chore
@@ -79,4 +80,12 @@ class ChoreReadSerializer(serializers.ModelSerializer):
             'completedAt',
             'parentId',
             'category',
+            'isRedeemed',
         )
+class RedeemRewardSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(source='reward', max_digits=10, decimal_places=2)
+    isRedeemed = serializers.BooleanField(source='is_redeemed')
+
+    class Meta:
+        model = Chore
+        fields = ['title', 'amount', 'isRedeemed']

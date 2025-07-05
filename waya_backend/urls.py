@@ -32,6 +32,8 @@ urlpatterns = [
     path('api/taskmaster/', include('taskmaster.urls')),
     path('api/familywallet/', include('familywallet.urls')),
     path('api/insighttracker/', include('insighttracker.urls')),
+    path('api/chorequest/', include('chorequest.urls')),
+    path('api/moneymaze/', include('moneymaze.urls')),
 
     # IMPORTANT: Corrected these paths.
     # Assuming moneymaze.urls and notifications.urls don't *also* expect 'api/'

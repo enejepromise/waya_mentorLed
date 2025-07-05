@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'moneymaze',
     'notifications',
     'settings_waya',
+    'chorequest',
 
    # 'drf_yasg',
     'rest_framework',
@@ -312,7 +313,7 @@ SOCIALACCOUNT_PROVIDERS = {
 #EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Use Django's SMTP backend
+#EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Use Django's SMTP backend
 # #EMAIL_BACKEND = 'users.backends.email_backend.EmailBackend'  # Use Django's SMTP backend
 
 

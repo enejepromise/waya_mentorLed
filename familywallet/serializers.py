@@ -5,7 +5,6 @@ from children.models import Child
 from django.db import transaction as db_transaction
 
 
-
 # Family Wallet Serializer
 class FamilyWalletSerializer(serializers.ModelSerializer):
     parent_id = serializers.UUIDField(source='parent.id', read_only=True)
@@ -50,7 +49,7 @@ class ChildWalletSerializer(serializers.ModelSerializer):
 # Transaction Serializer
 class TransactionSerializer(serializers.ModelSerializer):
     family_wallet_id = serializers.UUIDField(source='parent.family_wallet.id', read_only=True)
-    child_id = serializers.UUIDField(source='child.id', read_only=True)
+    child_id = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = Transaction
@@ -59,7 +58,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             'type', 'amount', 'status',
             'description', 'created_at', 'completed_at'
         ]
-        read_only_fields = fields
+        read_only_fields = ['id', 'family_wallet_id', 'created_at', 'completed_at']
 
 
 # Complete Multiple Transactions Serializer
@@ -67,7 +66,6 @@ class CompleteTransactionSerializer(serializers.Serializer):
     transaction_ids = serializers.ListField(
         child=serializers.UUIDField(), allow_empty=False
     )
-
 
 # Make Payment Serializer
 class MakePaymentSerializer(serializers.Serializer):
@@ -158,34 +156,54 @@ class DashboardStatsSerializer(serializers.Serializer):
     children_count = serializers.IntegerField()
     total_children_balance = serializers.DecimalField(max_digits=12, decimal_places=2)
 
-
 # Allowance Serializer
 class AllowanceSerializer(serializers.ModelSerializer):
+    # parent_id is read-only, only shown in response
     parent_id = serializers.UUIDField(source='parent.id', read_only=True)
-    child_id = serializers.UUIDField(source='child.id')
+    
+    # write-only: client provides this UUID to assign the child
+    child_id = serializers.UUIDField(write_only=True)
+
+    # optional: include a read-only name of the child to show in response
+    child_name = serializers.CharField(source='child.name', read_only=True)
 
     class Meta:
         model = Allowance
         fields = [
-            'id', 'parent_id', 'child_id',
+            'id', 'parent_id', 'child_id', 'child_name',
             'amount', 'frequency', 'status',
             'created_at', 'last_paid_at', 'next_payment_date'
         ]
-        read_only_fields = ['id', 'parent_id', 'created_at', 'last_paid_at', 'next_payment_date']
+        read_only_fields = [
+            'id', 'parent_id', 'child_name',
+            'created_at', 'last_paid_at', 'next_payment_date'
+        ]
 
     def validate_child_id(self, value):
+        """
+        Ensure the child exists and belongs to the authenticated parent.
+        """
         user = self.context['request'].user
-        try:
-            Child.objects.get(id=value, parent=user)
-        except Child.DoesNotExist:
+        if not Child.objects.filter(id=value, parent=user).exists():
             raise serializers.ValidationError("Child not found or does not belong to you.")
         return value
 
     def create(self, validated_data):
-        child = Child.objects.get(id=validated_data.pop('child')['id'])
-        allocation = Allowance.objects.create(
-            parent=self.context['request'].user,
-            child=child,
-            **validated_data
-        )
-        return allocation
+        """
+        Replace child_id with the actual child instance before saving.
+        """
+        child_id = validated_data.pop('child_id')
+        child = Child.objects.get(id=child_id)
+        validated_data['child'] = child
+        validated_data['parent'] = self.context['request'].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        """
+        Handle updates safely: map child_id to child, if provided.
+        """
+        child_id = validated_data.pop('child_id', None)
+        if child_id:
+            child = Child.objects.get(id=child_id)
+            validated_data['child'] = child
+        return super().update(instance, validated_data)
