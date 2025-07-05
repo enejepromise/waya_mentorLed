@@ -14,7 +14,11 @@ urlpatterns = [
     path('wallet/dashboard_stats/', FamilyWalletViewSet.as_view({'get': 'dashboard_stats'}), name='wallet-dashboard-stats'),
     path('wallet/earnings_chart_data/', FamilyWalletViewSet.as_view({'get': 'earnings_chart_data'}), name='wallet-earnings-chart-data'),
     path('wallet/savings_breakdown/', FamilyWalletViewSet.as_view({'get': 'savings_breakdown'}), name='wallet-savings-breakdown'),
+    path('wallet/wallet_summary/', FamilyWalletViewSet.as_view({'get': 'wallet_summary'}), name='wallet-summary'),
     path('wallet/transfer/', FamilyWalletViewSet.as_view({'post': 'transfer'}), name='wallet-transfer'),
+    path('wallet/reward_bar_chart/', FamilyWalletViewSet.as_view({'get': 'reward_bar_chart'}), name='wallet-reward-bar-chart'),
+    path('wallet/reward_pie_chart/', FamilyWalletViewSet.as_view({'get': 'reward_pie_chart'}), name='wallet-reward-pie-chart'),
+
 
     # WALLET PIN AND PAYMENT ENDPOINTS
     path('wallet/set_pin/', WalletViewSet.as_view({'post': 'set_pin'}), name='wallet-set-pin'),

@@ -60,7 +60,6 @@ class TransactionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'family_wallet_id', 'created_at', 'completed_at']
 
-
 # Complete Multiple Transactions Serializer
 class CompleteTransactionSerializer(serializers.Serializer):
     transaction_ids = serializers.ListField(
