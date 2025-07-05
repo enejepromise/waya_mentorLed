@@ -1,13 +1,14 @@
-from rest_framework.views import APIView
+from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Sum
 from children.models import Child
 from taskmaster.models import Chore
 from .serializers import InsightChoreSerializer
 
-class InsightChoreView(APIView):
+
+class InsightChoreView(GenericAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = InsightChoreSerializer  # <-- This is required
 
     def get(self, request):
         parent = request.user
@@ -50,5 +51,5 @@ class InsightChoreView(APIView):
             "child_activities": child_activities
         }
 
-        serializer = InsightChoreSerializer(data)
+        serializer = self.get_serializer(data)
         return Response(serializer.data)

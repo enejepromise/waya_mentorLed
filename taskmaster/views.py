@@ -6,11 +6,11 @@ from notifications.models import Notification
 from .serializers import (
     ChoreCreateUpdateSerializer,
     ChoreReadSerializer,
+    ChoreSerializer,
     ChoreStatusUpdateSerializer,
 )
 from .permissions import IsParentOfChore, IsChildAssignedToChore
 from .models import notify_parent_realtime
-
 
 class ChoreCreateView(generics.CreateAPIView):
     """
@@ -169,6 +169,7 @@ class ChildChoreStatusUpdateView(generics.UpdateAPIView):
 
 
 class ChoreDeleteView(generics.DestroyAPIView):
+    serializer_class = ChoreSerializer
     """
     DELETE /api/chores/{id}/ - Delete a chore
     """
@@ -182,7 +183,6 @@ class ChoreDeleteView(generics.DestroyAPIView):
             return Response({"detail": "Chore not found."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"detail": f"Server error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class ChoreStatusBreakdownView(APIView):
     """

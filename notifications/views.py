@@ -1,25 +1,19 @@
-from django.shortcuts import render
-
-# Create your views here.
-from rest_framework import generics, status
+from rest_framework import generics, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from children.models import Child
-
-from rest_framework import generics, permissions
-from .models import Notification
-from .serializers import NotificationSerializer
-from .models import Reward
+from children.serializers import ChildSerializer
+from .models import Notification, Reward
 from .serializers import (
     UserProfileSerializer,
-    ChildSerializer,
+    NotificationRewardSerializer,  # Use the renamed serializer here
     PasswordResetSerializer,
-    RewardSerializer
+    NotificationSerializer,
+    EmptySerializer
 )
 
 User = get_user_model()
-
 
 # ---- User Profile View ----
 class UserProfileView(generics.RetrieveUpdateAPIView):
@@ -37,7 +31,6 @@ class ChildView(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Return only children owned by the current parent
         return Child.objects.filter(parent=self.request.user)
 
     def get_object(self):
@@ -63,20 +56,19 @@ class PasswordResetView(generics.GenericAPIView):
 
         return Response({"detail": "Password changed successfully."}, status=status.HTTP_200_OK)
 
+
 # ---- Reward Settings View ----
 class RewardView(generics.RetrieveUpdateAPIView):
-    serializer_class = RewardSerializer
+    serializer_class = NotificationRewardSerializer  # Use NotificationRewardSerializer here
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
         setting, _ = Reward.objects.get_or_create(user=self.request.user)
         return setting
 
+
+# ---- Notification List View ----
 class NotificationListView(generics.ListAPIView):
-    """
-    GET /api/parents/notifications/ — List notifications for the logged-in parent
-    Optional filter: ?unread=true to get only unread notifications
-    """
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -89,8 +81,10 @@ class NotificationListView(generics.ListAPIView):
         return qs
 
 
+# ---- Mark Notification as Read View ----
 class MarkNotificationReadView(generics.UpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = EmptySerializer  # Required by DRF even if not used
     queryset = Notification.objects.all()
     lookup_field = "id"
 

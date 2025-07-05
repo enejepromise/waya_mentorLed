@@ -7,7 +7,6 @@ from .models import (
     AnswerChoice, QuizResult, Reward, RewardEarned
 )
 
-
 class ConceptSerializer(serializers.ModelSerializer):
     class Meta:
         model = Concept
@@ -133,3 +132,8 @@ class RewardEarnedSerializer(serializers.ModelSerializer):
         model = RewardEarned
         fields = ['id', 'child', 'reward', 'earned_on']
         read_only_fields = ['child', 'earned_on']
+class DashboardSerializer(serializers.Serializer):
+    concepts_completed = serializers.IntegerField()
+    total_concepts = serializers.IntegerField()
+    progress_percentage = serializers.FloatField()
+    rewards_earned = serializers.IntegerField()

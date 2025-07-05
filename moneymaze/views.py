@@ -1,6 +1,7 @@
 from django.db import transaction
 from rest_framework import generics, status
 from rest_framework.views import APIView
+from .serializers import DashboardSerializer
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 
@@ -40,6 +41,7 @@ class QuizDetailView(generics.RetrieveAPIView):
 
 
 class SubmitQuizView(APIView):
+    serializer_class = QuizSubmissionSerializer
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -137,6 +139,7 @@ class RewardListView(generics.ListAPIView):
 
 
 class DashboardView(APIView):
+    serializer_class = DashboardSerializer
     permission_classes = [IsAuthenticated]
 
     def get(self, request):

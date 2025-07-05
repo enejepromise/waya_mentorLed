@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from .models import Chore
-from django.utils import timezone
 from children.models import Child
 
 class ChoreCreateUpdateSerializer(serializers.ModelSerializer):
@@ -25,11 +24,14 @@ class ChoreCreateUpdateSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         parent = request.user
 
-        assigned_to_id = attrs.pop('assigned_to')
+        assigned_to_id = attrs.get('assigned_to')
+        if not assigned_to_id:
+            raise serializers.ValidationError({"assigned_to": "This field is required."})
+
         try:
             assigned_to = Child.objects.get(id=assigned_to_id)
         except Child.DoesNotExist:
-            raise serializers.ValidationError("Assigned child not found.")
+            raise serializers.ValidationError({"assigned_to": "Assigned child not found."})
 
         if assigned_to.parent != parent:
             raise serializers.ValidationError("You cannot assign a chore to a child that is not yours.")
@@ -54,6 +56,7 @@ class ChoreStatusUpdateSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
 class ChoreReadSerializer(serializers.ModelSerializer):
     assignedTo = serializers.UUIDField(source='assigned_to.id')
     assignedToName = serializers.CharField(source='assigned_to.name')
@@ -62,8 +65,8 @@ class ChoreReadSerializer(serializers.ModelSerializer):
     amount = serializers.DecimalField(source='reward', max_digits=10, decimal_places=2)
     createdAt = serializers.DateTimeField(source='created_at')
     completedAt = serializers.DateTimeField(source='completed_at')
-    category = serializers.CharField(required=False)
-    isRedeemed = serializers.BooleanField(source='is_redeemed') 
+    category = serializers.CharField(required=False, allow_blank=True)  # Removed source='category'
+    isRedeemed = serializers.BooleanField(source='is_redeemed')
 
     class Meta:
         model = Chore
@@ -82,6 +85,8 @@ class ChoreReadSerializer(serializers.ModelSerializer):
             'category',
             'isRedeemed',
         )
+
+
 class RedeemRewardSerializer(serializers.ModelSerializer):
     amount = serializers.DecimalField(source='reward', max_digits=10, decimal_places=2)
     isRedeemed = serializers.BooleanField(source='is_redeemed')
@@ -89,3 +94,13 @@ class RedeemRewardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Chore
         fields = ['title', 'amount', 'isRedeemed']
+
+
+class ChoreSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Chore
+        fields = "__all__"
+
+
+class EmptySerializer(serializers.Serializer):
+    pass

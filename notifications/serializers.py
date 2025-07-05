@@ -14,10 +14,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = ['avatar', 'full_name', 'email']
 
 
-class ChildSerializer(serializers.ModelSerializer):
+class NotificationChildSerializer(serializers.ModelSerializer):  # ✅ renamed
     class Meta:
         model = Child
-        fields = ['id', 'username', 'avatar']  # Include the fields you want to expose
+        fields = ['id', 'username', 'avatar']
 
 
 class PasswordResetSerializer(serializers.Serializer):
@@ -30,6 +30,7 @@ class PasswordResetSerializer(serializers.Serializer):
             raise serializers.ValidationError("New passwords do not match.")
         validate_password(data['new_password'])
         return data
+
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,8 +46,7 @@ class NotificationSerializer(serializers.ModelSerializer):
         ]
 
 
-
-class RewardSerializer(serializers.ModelSerializer):
+class NotificationRewardSerializer(serializers.ModelSerializer):  # ✅ renamed
     class Meta:
         model = Reward
         fields = [
@@ -54,3 +54,8 @@ class RewardSerializer(serializers.ModelSerializer):
             'max_daily_reward',
             'allow_savings'
         ]
+
+
+# ✅ Empty serializer for views that don’t need request input
+class EmptySerializer(serializers.Serializer):
+    pass

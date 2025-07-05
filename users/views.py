@@ -1,3 +1,5 @@
+from users.serializers import ResendEmailSerializer 
+
 import requests
 # from drf_yasg.utils import swagger_auto_schema
 # from drf_yasg import openapi
@@ -368,8 +370,8 @@ class GoogleLoginView(SocialLoginView):
 
         return super().post(request, *args, **kwargs)
 
-
-class ResendVerificationEmailView(APIView):
+class ResendVerificationEmailView(generics.GenericAPIView):  # ✅ use GenericAPIView
+    serializer_class = ResendEmailSerializer
 
     # @swagger_auto_schema(
     #     operation_description="Resend verification email to user",

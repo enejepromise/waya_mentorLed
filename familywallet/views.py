@@ -151,72 +151,108 @@ class FamilyWalletViewSet(viewsets.ModelViewSet):
             'new_balance': str(family_wallet.balance)
         }, status=status.HTTP_200_OK)
 
-@action(detail=False, methods=['get'], url_path='reward_bar_chart')
-def reward_bar_chart(self, request):
-    """
-    Returns bar chart data: earnings per child per day, plus highest & lowest earner.
-    """
-    days = int(request.query_params.get('days', 30))
-    start_date = timezone.now() - timedelta(days=days)
+    @action(detail=False, methods=['get'], url_path='reward_bar_chart')
+    def reward_bar_chart(self, request):
+        """
+        Returns bar chart data: earnings per child per day, plus highest & lowest earner.
+        """
+        days = int(request.query_params.get('days', 30))
+        start_date = timezone.now() - timedelta(days=days)
 
-    transactions = Transaction.objects.filter(
-        parent=request.user,
-        type='chore_reward',
-        status='paid',
-        created_at__gte=start_date
-    ).select_related('child')
+        transactions = Transaction.objects.filter(
+            parent=request.user,
+            type='chore_reward',
+            status='paid',
+            created_at__gte=start_date
+        ).select_related('child')
 
-    chart_data = defaultdict(lambda: defaultdict(Decimal))
-    total_by_child = defaultdict(Decimal)
+        chart_data = defaultdict(lambda: defaultdict(Decimal))
+        total_by_child = defaultdict(Decimal)
 
-    for tx in transactions:
-        date_key = tx.created_at.strftime('%B %d, %Y')  # e.g., "April 22, 2025"
-        child_name = tx.child.name if tx.child else "Unknown"
-        chart_data[date_key][child_name] += tx.amount
-        total_by_child[child_name] += tx.amount
+        for tx in transactions:
+            date_key = tx.created_at.strftime('%B %d, %Y')  # e.g., "April 22, 2025"
+            child_name = tx.child.name if tx.child else "Unknown"
+            chart_data[date_key][child_name] += tx.amount
+            total_by_child[child_name] += tx.amount
 
-    # Step 2: Identify highest and lowest earner
-    if total_by_child:
-        highest_earner = max(total_by_child.items(), key=lambda x: x[1])
-        lowest_earner = min(total_by_child.items(), key=lambda x: x[1])
-    else:
-        highest_earner = lowest_earner = ("None", Decimal("0.00"))
+        # Step 2: Identify highest and lowest earner
+        if total_by_child:
+            highest_earner = max(total_by_child.items(), key=lambda x: x[1])
+            lowest_earner = min(total_by_child.items(), key=lambda x: x[1])
+        else:
+            highest_earner = lowest_earner = ("None", Decimal("0.00"))
 
-    return Response({
-        "chart_data": chart_data,
-        "highest_earner": {
-            "name": highest_earner[0],
-            "amount": highest_earner[1]
-        },
-        "lowest_earner": {
-            "name": lowest_earner[0],
-            "amount": lowest_earner[1]
-        }
-    })
-
-
-@action(detail=False, methods=['get'], url_path='reward_pie_chart')
-def reward_pie_chart(self, request):
-    """
-    Returns pie chart data: reward spent vs reward saved per child.
-    """
-    children_wallets = ChildWallet.objects.filter(child__parent=request.user)
-
-    pie_data = []
-
-    for wallet in children_wallets:
-        child_name = wallet.child.name
-        saved = wallet.balance
-        spent = wallet.total_spent
-
-        pie_data.append({
-            "child_name": child_name,
-            "reward_saved": saved,
-            "reward_spent": spent,
-            "total": saved + spent
+        return Response({
+            "chart_data": chart_data,
+            "highest_earner": {
+                "name": highest_earner[0],
+                "amount": highest_earner[1]
+            },
+            "lowest_earner": {
+                "name": lowest_earner[0],
+                "amount": lowest_earner[1]
+            }
         })
 
-    return Response(pie_data)
+
+    @action(detail=False, methods=['get'], url_path='reward_pie_chart')
+    def reward_pie_chart(self, request):
+        """
+        Returns pie chart data: reward spent vs reward saved per child.
+        """
+        children_wallets = ChildWallet.objects.filter(child__parent=request.user)
+
+        pie_data = []
+
+        for wallet in children_wallets:
+            child_name = wallet.child.name
+            saved = wallet.balance
+            spent = wallet.total_spent
+
+            pie_data.append({
+                "child_name": child_name,
+                "reward_saved": saved,
+                "reward_spent": spent,
+                "total": saved + spent
+            })
+
+        return Response(pie_data)
+    
+    @action(detail=False, methods=['get'], url_path='wallet-summary')
+    def wallet_summary(self, request):
+        """
+        Return a summary breakdown of the family wallet:
+        - Total balance
+        - Total reward sent (paid chore rewards)
+        - Total reward pending (pending chore rewards)
+        """
+        try:
+            family_wallet = request.user.family_wallet
+
+            # Get total reward sent: paid chore_reward transactions
+            total_reward_sent = Transaction.objects.filter(
+                parent=request.user,
+                type='chore_reward',
+                status='paid'
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+            # Get total reward pending: pending chore_reward transactions
+            total_reward_pending = Transaction.objects.filter(
+                parent=request.user,
+                type='chore_reward',
+                status='pending'
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+            return Response({
+                'wallet_balance': family_wallet.balance,
+                'total_reward_sent': total_reward_sent,
+                'total_reward_pending': total_reward_pending
+            })
+
+        except FamilyWallet.DoesNotExist:
+            return Response({'error': 'Family wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 
 
 class ChildWalletViewSet(viewsets.ReadOnlyModelViewSet):
@@ -261,42 +297,6 @@ class ChildWalletViewSet(viewsets.ReadOnlyModelViewSet):
             'activities': activities,
             'savings_breakdown': savings_breakdown
         })
-
-
-    @action(detail=False, methods=['get'], url_path='wallet-summary')
-    def wallet_summary(self, request):
-        """
-        Return a summary breakdown of the family wallet:
-        - Total balance
-        - Total reward sent (paid chore rewards)
-        - Total reward pending (pending chore rewards)
-        """
-        try:
-            family_wallet = request.user.family_wallet
-
-            # Get total reward sent: paid chore_reward transactions
-            total_reward_sent = Transaction.objects.filter(
-                parent=request.user,
-                type='chore_reward',
-                status='paid'
-            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-
-            # Get total reward pending: pending chore_reward transactions
-            total_reward_pending = Transaction.objects.filter(
-                parent=request.user,
-                type='chore_reward',
-                status='pending'
-            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-
-            return Response({
-                'wallet_balance': family_wallet.balance,
-                'total_reward_sent': total_reward_sent,
-                'total_reward_pending': total_reward_pending
-            })
-
-        except FamilyWallet.DoesNotExist:
-            return Response({'error': 'Family wallet not found'}, status=status.HTTP_404_NOT_FOUND)
-
 
 
 class TransactionViewSet(viewsets.ModelViewSet):

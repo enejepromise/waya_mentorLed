@@ -60,10 +60,16 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         return user
 
-
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
+class UserLoginResponseSerializer(serializers.Serializer):
+    id = serializers.UUIDField(help_text="Unique identifier for the user.") # Or IntegerField if your ID is int
+    name = serializers.CharField(help_text="Full name of the user.")
+    email = serializers.EmailField(help_text="Email address of the user.")
+    avatar = serializers.URLField(allow_null=True, help_text="URL of the user's avatar, if available.")
+    token = serializers.CharField(help_text="Access token for authentication.")
+    refresh = serializers.CharField(help_text="Refresh token for renewing access.")
 
 
 class PasswordChangeSerializer(serializers.Serializer):
@@ -148,3 +154,6 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 class EmailVerificationSerializer(serializers.Serializer):
     uidb64 = serializers.CharField()
     token = serializers.CharField()
+
+class ResendEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
