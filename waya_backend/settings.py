@@ -158,7 +158,7 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 # Don't do the below in production but for allowing more users for development purposes
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 ROOT_URLCONF = 'waya_backend.urls'
 
@@ -269,15 +269,25 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
 
-
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 3
+    'PAGE_SIZE': 3,
+    
+    # Throttle settings
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.AnonRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '100/hour',   # Authenticated users
+        'anon': '10/minute',  # Anonymous requests
+    }
 }
+
 
 
 REST_AUTH_REGISTER_SERIALIZERS = {
