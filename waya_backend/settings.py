@@ -284,7 +284,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'user': '100/hour',   # Authenticated users
-        'anon': '10/minute',  # Anonymous requests
+        'anon': '100/hour',  # Anonymous requests
     }
 }
 
@@ -297,8 +297,8 @@ REST_AUTH_REGISTER_SERIALIZERS = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
