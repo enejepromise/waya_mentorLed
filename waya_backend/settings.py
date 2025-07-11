@@ -159,6 +159,8 @@ CORS_ALLOWED_ORIGINS = [
 
 # Don't do the below in production but for allowing more users for development purposes
 CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+
 
 ROOT_URLCONF = 'waya_backend.urls'
 
