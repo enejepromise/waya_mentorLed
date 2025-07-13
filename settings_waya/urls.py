@@ -5,6 +5,7 @@ from .views import (
     PasswordResetView,
     NotificationSettingsView,
     RewardSettingsView,
+    ChildListCreateView,
 )
 
 urlpatterns = [
@@ -13,4 +14,5 @@ urlpatterns = [
     path('password-reset/', PasswordResetView.as_view(), name='password-reset'),
     path('notification-settings/', NotificationSettingsView.as_view(), name='notification-settings'),
     path('reward-settings/', RewardSettingsView.as_view(), name='reward-settings'),
+    path('children/', ChildListCreateView.as_view(), name='children-list-create'),
 ]

@@ -67,3 +67,13 @@ class RewardSettingsView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         setting, _ = RewardSettings.objects.get_or_create(user=self.request.user)
         return setting
+    
+class ChildListCreateView(generics.ListCreateAPIView):
+    serializer_class = ChildSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Child.objects.filter(parent=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(parent=self.request.user)
