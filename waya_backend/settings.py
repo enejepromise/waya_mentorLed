@@ -133,7 +133,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # Don't do the below in production but for allowing more users for development purposes
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 
@@ -261,8 +261,8 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '500/hour',   
-        'user': '2000/hour',
+        'anon': '1000/hour',   
+        'user': '10000/hour',
     }
 }
 
