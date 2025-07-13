@@ -1,4 +1,8 @@
 from django.urls import path
+from rest_framework_simplejwt.views import (
+    TokenRefreshView,
+    TokenBlacklistView,
+)
 from .views import (
     UserRegistrationView,
     UserLoginView,
@@ -25,4 +29,7 @@ urlpatterns = [
     path('', home, name='home'),
     path('social-login/google/', GoogleLoginView.as_view(), name='google-login'), 
     path('resend-email/', ResendVerificationEmailView.as_view(), name='resend-verification-email'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/blacklist/', TokenBlacklistView.as_view(), name='token_blacklist'),
+
 ]

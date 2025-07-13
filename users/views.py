@@ -1,9 +1,6 @@
 from users.serializers import ResendEmailSerializer 
-
+from allauth.socialaccount.helpers import complete_social_login
 import requests
-# from drf_yasg.utils import swagger_auto_schema
-# from drf_yasg import openapi
-
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.tokens import default_token_generator
@@ -18,17 +15,14 @@ from django.contrib.sites.shortcuts import get_current_site
 from rest_framework import generics, status, permissions
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from users.models import User
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-
 from dj_rest_auth.registration.views import SocialLoginView
-
-#from allauth.socialaccount.adapter import get_adapter
 from allauth.socialaccount.helpers import complete_social_login
-# from allauth.socialaccount.models import SocialAccount
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-#from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-#from .models import SocialLoginAccount
+from allauth.socialaccount.models import SocialLogin
+
 from users.models import EmailVerification
 from users.serializers import (
     UserRegistrationSerializer,
@@ -288,64 +282,50 @@ def home(request):
 class GoogleLoginView(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
 
-    # @swagger_auto_schema(
-    #     operation_description="Login with Google OAuth2 access token",
-    #     request_body=openapi.Schema(
-    #         type=openapi.TYPE_OBJECT,
-    #         required=['access_token'],
-    #         properties={
-    #             'access_token': openapi.Schema(type=openapi.TYPE_STRING, description='Google OAuth2 access token'),
-    #         },
-    #     ),
-    #     responses={
-    #         200: openapi.Response('Login successful', schema=openapi.Schema(
-    #             type=openapi.TYPE_OBJECT,
-    #             properties={
-    #                 'detail': openapi.Schema(type=openapi.TYPE_STRING),
-    #                 'user_id': openapi.Schema(type=openapi.TYPE_STRING),
-    #                 'email': openapi.Schema(type=openapi.TYPE_STRING),
-    #             }
-    #         )),
-    #         400: 'Bad request',
-    #         403: 'Forbidden',
-    #     }
-    # )
-
     def post(self, request, *args, **kwargs):
         access_token = request.data.get("access_token")
         if not access_token:
             return Response({"error": "Access token is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        adapter = self.adapter_class()
-        app = adapter.get_provider().get_app(self.request)
-        token = adapter.parse_token({'access_token': access_token})
-        token.app = app
+        # Properly initialize the adapter with the request
+        adapter = self.adapter_class(request)
 
-        # Get Google user info using the access token
+        # Parse the token from the access_token string
+        token = adapter.parse_token({'access_token': access_token})
+
+        # Get user info from Google using the access token
         try:
-            login = adapter.complete_login(self.request, app, token, response=requests.Response())
+            response = requests.get(
+                'https://www.googleapis.com/oauth2/v3/userinfo',
+                headers={'Authorization': f'Bearer {access_token}'}
+            )
+            response.raise_for_status()
+        except requests.RequestException:
+            return Response({"error": "Invalid access token"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Complete the login process with the adapter
+        try:
+            login = adapter.complete_login(request, token=token, response=response.json())
             login.token = token
-            login.state = SocialLoginView.serializer_class().validate(request.data)
+            login.state = SocialLoginView.state_from_request(request)
             login.lookup()
-        except Exception as e:
+        except Exception:
             return Response({"error": "Failed to complete Google login."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get the Google email
         google_email = login.account.extra_data.get("email")
         if not google_email:
             return Response({"error": "Unable to retrieve email from Google account"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Your existing user verification and login logic remains unchanged
         try:
-            # Try to match to an existing local user
             existing_user = User.objects.get(email=google_email)
 
             if not existing_user.verified:
                 return Response({"error": "Account not verified."}, status=status.HTTP_403_FORBIDDEN)
 
             if not existing_user.role:
-                # Redirect to select role if verified
                 login.user = existing_user
-                complete_social_login(self.request, login)
+                complete_social_login(request, login)
                 return HttpResponseRedirect(
                     f"https://waya-fawn.vercel.app/user-role?user_id={existing_user.id}"
                 )
@@ -353,9 +333,8 @@ class GoogleLoginView(SocialLoginView):
             if existing_user.role != "parent":
                 return Response({"error": "Only parents are allowed to log in here."}, status=status.HTTP_403_FORBIDDEN)
 
-            # All good – proceed to login
             login.user = existing_user
-            complete_social_login(self.request, login)
+            complete_social_login(request, login)
             return Response({
                 "detail": "Login successful.",
                 "user_id": existing_user.id,
@@ -363,11 +342,9 @@ class GoogleLoginView(SocialLoginView):
             }, status=status.HTTP_200_OK)
 
         except User.DoesNotExist:
-            # No existing user → Google login not allowed for unregistered users
             return Response({
                 "error": "This Google account is not registered as a parent. Please sign up through the registration flow."
             }, status=status.HTTP_403_FORBIDDEN)
-
         return super().post(request, *args, **kwargs)
 
 class ResendVerificationEmailView(generics.GenericAPIView):  # ✅ use GenericAPIView

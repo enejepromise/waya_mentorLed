@@ -18,6 +18,10 @@ urlpatterns = [
     path('wallet/transfer/', FamilyWalletViewSet.as_view({'post': 'transfer'}), name='wallet-transfer'),
     path('wallet/reward_bar_chart/', FamilyWalletViewSet.as_view({'get': 'reward_bar_chart'}), name='wallet-reward-bar-chart'),
     path('wallet/reward_pie_chart/', FamilyWalletViewSet.as_view({'get': 'reward_pie_chart'}), name='wallet-reward-pie-chart'),
+    # Initiate a Paystack payment (generates reference & redirect link)
+    path('wallet/paystack/initiate/', FamilyWalletViewSet.as_view({'post': 'initiate_paystack_payment'}), name='wallet-paystack-initiate'),
+    # Verify a Paystack payment after user completes the payment
+    path('wallet/paystack/verify/', FamilyWalletViewSet.as_view({'post': 'verify_paystack_payment'}), name='wallet-paystack-verify'),
 
 
     # WALLET PIN AND PAYMENT ENDPOINTS

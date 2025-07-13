@@ -34,8 +34,11 @@ urlpatterns = [
     path('api/insighttracker/', include('insighttracker.urls')),
     path('api/chorequest/', include('chorequest.urls')),
     path('api/moneymaze/', include('moneymaze.urls')),
+    path('api/goalgetter/', include('goalgetter.urls')),
+    path('api/settings_waya/', include('settings_waya.urls')),
 
-    # IMPORTANT: Corrected these paths.
+
+     # IMPORTANT: Corrected these paths.
     # Assuming moneymaze.urls and notifications.urls don't *also* expect 'api/'
     # as their base prefix within their own urls.py files.
     # If moneymaze.urls expects just '/moneymaze/', then this is correct.

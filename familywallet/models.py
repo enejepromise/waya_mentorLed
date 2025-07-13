@@ -90,6 +90,7 @@ class Transaction(models.Model):
     TYPE_CHOICES = [
         ("chore_reward", "Chore Reward"),
         ("allowance_payment", "Allowance Payment"),
+        ("wallet_funding", "Wallet Funding"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -100,6 +101,7 @@ class Transaction(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     description = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    reference = models.CharField(max_length=100, blank=True, null=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 

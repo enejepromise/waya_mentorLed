@@ -13,7 +13,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 class ChildSerializer(serializers.ModelSerializer):
     class Meta:
         model = Child
-        fields = ['id', 'name', 'username', 'avatar', 'family_name']
+        fields = ['id', 'name', 'username', 'avatar']
 
 class PasswordResetSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)

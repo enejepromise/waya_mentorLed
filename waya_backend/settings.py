@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'notifications',
     'settings_waya',
     'chorequest',
+    'goalgetter',
 
    # 'drf_yasg',
     'rest_framework',
@@ -95,49 +96,12 @@ INSTALLED_APPS = [
 
 ]
 
-
-
-# Application definition
-
-# INSTALLED_APPS = [
-#     'django.contrib.admin',
-#     'django.contrib.auth',
-#     'django.contrib.contenttypes',
-#     'django.contrib.sessions',
-#     'django.contrib.messages',
-#     'django.contrib.staticfiles',
-#     'rest_framework',
-#     'rest_framework_simplejwt',
-#     'rest_framework.authtoken',
-#     'rest_framework_simplejwt.token_blacklist',
-#     'corsheaders',
-#     'users.apps.UsersConfig',
-#     'children',
-#     'taskmaster',
-#     'familywallet',
-#     'insighttracker',
-#     'settings_waya',
-
-# 'django.contrib.sites',
-#     'django.contrib.auth',           # Required for authentication
-#     'django.contrib.contenttypes',   # Should come before third-party apps
-#     'django.contrib.sessions',       # Required for sessions
-#     # 'django.contrib.admin',        # Uncomment if admin is needed
-#     # Third-party apps
-#     'allauth',
-#     'allauth.account',
-#     'allauth.socialaccount',
-#     'allauth.socialaccount.providers.google',
-#     'dj_rest_auth',
-#     'dj_rest_auth.registration',
-#     # ... any other apps ...
-# ]
-
 ACCOUNT_ADAPTER = 'users.adapter.WayaAccountAdapter'
 
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -146,8 +110,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -157,8 +119,23 @@ CORS_ALLOWED_ORIGINS = [
     
 ]
 
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'cache-control', 
+]
+
 # Don't do the below in production but for allowing more users for development purposes
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
 
 ROOT_URLCONF = 'waya_backend.urls'
 
@@ -276,7 +253,17 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 3
+    'PAGE_SIZE': 3,
+
+    
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '500/hour',   
+        'user': '2000/hour',
+    }
 }
 
 
@@ -294,7 +281,6 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'APP': {
@@ -308,6 +294,32 @@ SOCIALACCOUNT_PROVIDERS = {
         }
     }
 }
+
+
+from decouple import config
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': config('REDIS_URL'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {'max_connections': 100} 
+        },
+        'KEY_PREFIX': 'waya_django_cache' 
+    }
+}
+
+# Use Redis for sessions too
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'default'
+
+# For Celery
+CELERY_BROKER_URL = config('REDIS_URL')
+
+# Optional: Use Redis for sessions too
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'default'
 
 
 #EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -354,6 +366,11 @@ LOGOUT_REDIRECT_URL = ''
 
 # FOR CELERY
 
-CELERY_BROKER_URL = 'redis://localhost:6379/0'
+#CELERY_BROKER_URL = 'redis://localhost:6379/0'
+#CELERY_BROKER_URL = os.getenv('REDIS_URL')
+CELERY_BROKER_URL = config('REDIS_URL')
+
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+PAYSTACK_SECRET_KEY = config('PAYSTACK_SECRET_KEY')
+PAYSTACK_PUBLIC_KEY = config('PAYSTACK_PUBLIC_KEY')

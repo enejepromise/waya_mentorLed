@@ -2,8 +2,12 @@ from rest_framework import viewsets, status, permissions, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from collections import defaultdict
+import uuid
+from .serializers import PaystackPaymentInitSerializer, PaystackPaymentVerifySerializer
 from rest_framework.decorators import action
 from django.db.models import Sum
+from utils.paystack import initialize_payment, verify_payment
+
 
 from django.contrib.auth.hashers import make_password
 from .serializers import (
@@ -25,6 +29,14 @@ class IsParentPermission(permissions.BasePermission):
     """Allow access only to authenticated parents."""
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == request.user.ROLE_PARENT
+
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from decimal import Decimal
+from django.utils import timezone
+from datetime import timedelta
+from collections import defaultdict
 
 class FamilyWalletViewSet(viewsets.ModelViewSet):
     serializer_class = FamilyWalletSerializer
@@ -51,7 +63,6 @@ class FamilyWalletViewSet(viewsets.ModelViewSet):
             }
             serializer = DashboardStatsSerializer(stats)
             return Response(serializer.data)
-
         except FamilyWallet.DoesNotExist:
             return Response({'error': 'Family wallet not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -175,7 +186,6 @@ class FamilyWalletViewSet(viewsets.ModelViewSet):
             chart_data[date_key][child_name] += tx.amount
             total_by_child[child_name] += tx.amount
 
-        # Step 2: Identify highest and lowest earner
         if total_by_child:
             highest_earner = max(total_by_child.items(), key=lambda x: x[1])
             lowest_earner = min(total_by_child.items(), key=lambda x: x[1])
@@ -194,7 +204,6 @@ class FamilyWalletViewSet(viewsets.ModelViewSet):
             }
         })
 
-
     @action(detail=False, methods=['get'], url_path='reward_pie_chart')
     def reward_pie_chart(self, request):
         """
@@ -203,7 +212,6 @@ class FamilyWalletViewSet(viewsets.ModelViewSet):
         children_wallets = ChildWallet.objects.filter(child__parent=request.user)
 
         pie_data = []
-
         for wallet in children_wallets:
             child_name = wallet.child.name
             saved = wallet.balance
@@ -217,7 +225,7 @@ class FamilyWalletViewSet(viewsets.ModelViewSet):
             })
 
         return Response(pie_data)
-    
+
     @action(detail=False, methods=['get'], url_path='wallet-summary')
     def wallet_summary(self, request):
         """
@@ -229,14 +237,12 @@ class FamilyWalletViewSet(viewsets.ModelViewSet):
         try:
             family_wallet = request.user.family_wallet
 
-            # Get total reward sent: paid chore_reward transactions
             total_reward_sent = Transaction.objects.filter(
                 parent=request.user,
                 type='chore_reward',
                 status='paid'
             ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
-            # Get total reward pending: pending chore_reward transactions
             total_reward_pending = Transaction.objects.filter(
                 parent=request.user,
                 type='chore_reward',
@@ -248,12 +254,60 @@ class FamilyWalletViewSet(viewsets.ModelViewSet):
                 'total_reward_sent': total_reward_sent,
                 'total_reward_pending': total_reward_pending
             })
-
         except FamilyWallet.DoesNotExist:
             return Response({'error': 'Family wallet not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    @action(detail=False, methods=['post'], url_path='paystack/initiate')
+    def initiate_paystack_payment(self, request):
+        serializer = PaystackPaymentInitSerializer(data=request.data)
+        if serializer.is_valid():
+            amount = serializer.validated_data['amount']
+            reference = str(uuid.uuid4())
 
+            response = initialize_payment(request.user.email, amount, reference)
 
+            if response.get("status"):
+                Transaction.objects.create(
+                    parent=request.user,
+                    type="wallet_funding",
+                    amount=amount,
+                    description="Funding wallet via Paystack",
+                    status="pending",
+                    reference=reference
+                )
+                return Response({
+                    "authorization_url": response["data"]["authorization_url"],
+                    "reference": reference
+                }, status=200)
+            return Response({"error": "Payment initialization failed."}, status=400)
+        return Response(serializer.errors, status=400)
+
+    @action(detail=False, methods=['post'], url_path='paystack/verify')
+    def verify_paystack_payment(self, request):
+        serializer = PaystackPaymentVerifySerializer(data=request.data)
+        if serializer.is_valid():
+            reference = serializer.validated_data['reference']
+
+            tx = Transaction.objects.filter(
+                parent=request.user,
+                reference=reference,
+                type="wallet_funding",
+                status="pending"
+            ).first()
+
+            if not tx:
+                return Response({"error": "Transaction not found or already processed."}, status=400)
+
+            response = verify_payment(reference)
+
+            if response.get("data", {}).get("status") == "success":
+                wallet = request.user.family_wallet
+                wallet.add_funds(tx.amount, "Paystack Wallet Funding", request.user)
+                tx.complete_transaction()
+                return Response({"message": "Wallet funded successfully!"}, status=200)
+
+            return Response({"error": "Verification failed."}, status=400)
+        return Response(serializer.errors, status=400)
 
 class ChildWalletViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ChildWalletSerializer
@@ -402,7 +456,6 @@ class AllowanceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(parent=self.request.user)
 
-
 class WalletViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin):
     serializer_class = WalletPinSerializer
     permission_classes = [IsParentPermission]
@@ -411,13 +464,30 @@ class WalletViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin):
     def set_pin(self, request):
         serializer = WalletPinSerializer(data=request.data)
         if serializer.is_valid():
-            wallet = request.user.family_wallet
+            # Automatically create the family wallet if it doesn't exist
+            wallet, created = FamilyWallet.objects.get_or_create(parent=request.user)
+
+            # Automatically create child wallets for each child
+            children = Child.objects.filter(parent=request.user)
+            child_wallets_created = 0
+            for child in children:
+                _, cw_created = ChildWallet.objects.get_or_create(child=child)
+                if cw_created:
+                    child_wallets_created += 1
+
+            # Set PIN
             pin = serializer.validated_data['pin']
             wallet.pin = make_password(pin)
             wallet.save()
-            return Response({'message': 'PIN set successfully'})
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+            return Response({
+                'message': 'PIN set successfully',
+                'wallet_created': created,
+                'child_wallets_created': child_wallets_created
+            })
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)    
+    
+    
     @action(detail=False, methods=['post'])
     def make_payment(self, request):
         serializer = MakePaymentSerializer(data=request.data, context={'request': request})

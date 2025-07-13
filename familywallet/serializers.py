@@ -25,6 +25,21 @@ class AddFundsSerializer(serializers.Serializer):
             raise serializers.ValidationError("Amount must be positive.")
         return value
 
+class PaystackPaymentInitSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Amount must be greater than zero.")
+        return value
+
+class PaystackPaymentVerifySerializer(serializers.Serializer):
+    reference = serializers.CharField()
+
+    def validate_reference(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Reference is required.")
+        return value
 
 # Wallet PIN Serializer
 class WalletPinSerializer(serializers.Serializer):
@@ -38,27 +53,34 @@ class WalletPinSerializer(serializers.Serializer):
 
 # Child Wallet Serializer
 class ChildWalletSerializer(serializers.ModelSerializer):
-    child_name = serializers.CharField(source='child.name', read_only=True)
-
+    child_id = serializers.UUIDField(source='child.id')  
+    child_name = serializers.CharField(source='child.name')  
     class Meta:
         model = ChildWallet
         fields = ['id', 'child_name', 'balance', 'total_earned', 'total_spent', 'savings_rate']
-        read_only_fields = fields
-
 
 # Transaction Serializer
 class TransactionSerializer(serializers.ModelSerializer):
     family_wallet_id = serializers.UUIDField(source='parent.family_wallet.id', read_only=True)
-    child_id = serializers.UUIDField(write_only=True)
-
+    child_id = serializers.UUIDField(source='child.id') 
+    child_name = serializers.CharField(source='child.name', read_only=True)
     class Meta:
         model = Transaction
         fields = [
-            'id', 'family_wallet_id', 'child_id',
+            'id', 'family_wallet_id','child_id', 
+            'child_name',
             'type', 'amount', 'status',
             'description', 'created_at', 'completed_at'
         ]
         read_only_fields = ['id', 'family_wallet_id', 'created_at', 'completed_at']
+
+    def create(self, validated_data):
+        child_id = validated_data.pop('child')['id'] if 'child' in validated_data else validated_data.pop('child_id', None)
+        child = Child.objects.get(id=child_id)
+        validated_data['child'] = child
+        # Set parent from request user to avoid null parent_id
+        validated_data['parent'] = self.context['request'].user
+        return super().create(validated_data)
 
 # Complete Multiple Transactions Serializer
 class CompleteTransactionSerializer(serializers.Serializer):
@@ -120,7 +142,8 @@ class MakePaymentSerializer(serializers.Serializer):
 
 # Savings Activity Breakdown Serializer
 class SavingsActivitySerializer(serializers.ModelSerializer):
-    child_name = serializers.CharField(source='child.name', read_only=True)
+    child_name = serializers.CharField(source='child.name')
+    child_id = serializers.UUIDField(source='child.id')
     activity = serializers.CharField(source='chore.title', default="Allowance")
     formatted_date = serializers.SerializerMethodField()
 
@@ -161,10 +184,10 @@ class AllowanceSerializer(serializers.ModelSerializer):
     parent_id = serializers.UUIDField(source='parent.id', read_only=True)
     
     # write-only: client provides this UUID to assign the child
-    child_id = serializers.UUIDField(write_only=True)
+    child_id = serializers.UUIDField()
 
     # optional: include a read-only name of the child to show in response
-    child_name = serializers.CharField(source='child.name', read_only=True)
+    child_name = serializers.CharField(source='child.name')
 
     class Meta:
         model = Allowance
@@ -174,7 +197,7 @@ class AllowanceSerializer(serializers.ModelSerializer):
             'created_at', 'last_paid_at', 'next_payment_date'
         ]
         read_only_fields = [
-            'id', 'parent_id', 'child_name',
+            'id', 'parent_id',
             'created_at', 'last_paid_at', 'next_payment_date'
         ]
 

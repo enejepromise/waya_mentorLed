@@ -1,7 +1,10 @@
 from rest_framework import generics, permissions, status
+#from waya_mentorLed.cache_utils import get_or_set_cache 
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import PermissionDenied
 from .models import Chore
+from children.models import Child
 from notifications.models import Notification
 from .serializers import (
     ChoreCreateUpdateSerializer,
@@ -120,17 +123,32 @@ class ChoreStatusUpdateView(generics.UpdateAPIView):
 class ChildChoreListView(generics.ListAPIView):
     """
     GET /api/children/chores/?childId=<uuid>
-    Returns chore list for a specific child (used in child dashboard)
+
+    - If the request comes from a **parent**, they must pass a `childId` that belongs to them.
+    - If the request comes from a **child**, the parent is still the `request.user`,
+      but we must use the `childId` returned during login to filter their chores.
     """
     serializer_class = ChoreReadSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        child_id = self.request.query_params.get("childId")
         user = self.request.user
+        child_id = self.request.query_params.get("childId")
+
         if not child_id:
             return Chore.objects.none()
-        return Chore.objects.filter(parent=user, assigned_to__id=child_id)
+
+        try:
+            child = Child.objects.get(id=child_id)
+        except Child.DoesNotExist:
+            raise PermissionDenied("Child not found.")
+
+        # Enforce that only the child's parent can access it
+        if child.parent != user:
+            raise PermissionDenied("You do not have access to this child's chores.")
+
+        return Chore.objects.filter(assigned_to=child)
+
 
 
 class ChildChoreStatusUpdateView(generics.UpdateAPIView):
