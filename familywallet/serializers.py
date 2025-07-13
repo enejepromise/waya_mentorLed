@@ -57,7 +57,7 @@ class ChildWalletSerializer(serializers.ModelSerializer):
     child_name = serializers.CharField(source='child.name')  
     class Meta:
         model = ChildWallet
-        fields = ['id', 'child_name', 'balance', 'total_earned', 'total_spent', 'savings_rate']
+        fields = ['id', 'child_name', 'balance', 'total_earned', 'total_spent', 'savings_rate','child_id']
 
 # Transaction Serializer
 class TransactionSerializer(serializers.ModelSerializer):
