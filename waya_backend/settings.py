@@ -60,6 +60,7 @@ ACCOUNT_LOGIN_METHODS = {'email'}
 SOCIALACCOUNT_QUERY_EMAIL = True
 
 INSTALLED_APPS = [
+    'nested_admin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -86,7 +87,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'channels',
-    'nested_admin',
+    
 
     'django.contrib.sites',  # Required for allauth(Google auto login)
     'allauth',
