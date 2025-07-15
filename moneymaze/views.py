@@ -1,7 +1,14 @@
 from django.db import transaction
+from .models import ConceptSection, SectionProgress
+from .serializers import ConceptSectionSerializer
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from .serializers import DashboardSerializer
+from django.utils import timezone
+from datetime import timedelta
+from rest_framework.generics import RetrieveAPIView
+from .models import WeeklyStreak
+from .serializers import WeeklyStreakSerializer
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 
@@ -168,7 +175,6 @@ class AdminConceptCreateView(generics.ListCreateAPIView):
     serializer_class = ConceptSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
 
-
 class AdminQuizCreateView(generics.CreateAPIView):
     queryset = Quiz.objects.all()
     serializer_class = QuizSerializer
@@ -191,3 +197,122 @@ class AdminRewardCreateView(generics.ListCreateAPIView):
     queryset = Reward.objects.all()
     serializer_class = RewardSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
+
+
+class WeeklyStreakView(APIView):
+    """
+    GET /api/moneymaze/weekly-streak/
+    Returns the child's streak for the current week (Mon to Sun).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        child = getattr(request.user, 'child_profile', None)
+        if not child:
+            return Response({"detail": "Child profile not found."}, status=400)
+
+        today = timezone.now().date()
+        week_start = today - timedelta(days=today.weekday())  # Monday
+
+        streak, created = WeeklyStreak.objects.get_or_create(
+            child=child,
+            week_start_date=week_start
+        )
+
+        serializer = WeeklyStreakSerializer(streak)
+        return Response(serializer.data)
+class ConceptSectionDetailView(APIView):
+    """
+    GET /api/moneymaze/concepts/<concept_id>/sections/<section_order>/
+    Returns one section (like a page) of the concept.
+    Tracks if the child has viewed it.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, concept_id, section_order):
+        child = getattr(request.user, 'child_profile', None)
+        if not child:
+            return Response({"detail": "Child profile not found."}, status=400)
+
+        try:
+            section = ConceptSection.objects.get(concept_id=concept_id, order=section_order)
+        except ConceptSection.DoesNotExist:
+            return Response({"detail": "Section not found."}, status=404)
+
+        # Mark section as viewed
+        SectionProgress.objects.get_or_create(child=child, section=section, viewed=True)
+
+        # Check how many sections exist and how many are viewed
+        all_sections = ConceptSection.objects.filter(concept_id=concept_id)
+        viewed_sections = SectionProgress.objects.filter(
+            child=child,
+            section__concept_id=concept_id,
+            viewed=True
+        ).count()
+
+        # If all sections are viewed, mark concept as completed
+        if viewed_sections == all_sections.count():
+            concept_progress, _ = ConceptProgress.objects.get_or_create(child=child, concept_id=concept_id)
+            concept_progress.unlocked = True
+            concept_progress.progress_percentage = 100
+            concept_progress.completed = True
+            concept_progress.save()
+
+        serializer = ConceptSectionSerializer(section)
+        return Response(serializer.data)
+class ConceptSectionListView(generics.ListAPIView):
+    serializer_class = ConceptSectionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        concept_id = self.kwargs['concept_id']
+        return ConceptSection.objects.filter(concept_id=concept_id).order_by('order')
+
+class ConceptSectionDetailView(RetrieveAPIView):
+    serializer_class = ConceptSectionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ConceptSection.objects.all().order_by('order')
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        child = getattr(request.user, 'child_profile', None)
+
+        # Mark as viewed
+        if child:
+            SectionProgress.objects.get_or_create(
+                child=child,
+                section=instance,
+                defaults={'viewed': True}
+            )
+        
+        return super().retrieve(request, *args, **kwargs)
+
+class CanAccessQuizView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, concept_id):
+        child = getattr(request.user, 'child_profile', None)
+        if not child:
+            return Response({"detail": "Child profile not found"}, status=400)
+
+        try:
+            concept = Concept.objects.get(id=concept_id)
+        except Concept.DoesNotExist:
+            return Response({"detail": "Concept not found"}, status=404)
+
+        total_sections = concept.sections.count()
+        viewed_sections = SectionProgress.objects.filter(
+            child=child,
+            section__concept=concept,
+            viewed=True
+        ).count()
+
+        can_access_quiz = (viewed_sections == total_sections)
+
+        return Response({
+            "total_sections": total_sections,
+            "viewed_sections": viewed_sections,
+            "can_access_quiz": can_access_quiz
+        })

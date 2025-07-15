@@ -4,15 +4,17 @@ from .models import FamilyWallet, ChildWallet, Transaction, Allowance
 from children.models import Child
 from django.db import transaction as db_transaction
 
-
 # Family Wallet Serializer
 class FamilyWalletSerializer(serializers.ModelSerializer):
     parent_id = serializers.UUIDField(source='parent.id', read_only=True)
 
     class Meta:
         model = FamilyWallet
-        fields = ['id', 'parent_id', 'balance', 'currency', 'updated_at']
+        fields = ['id', 'parent_id', 'balance', 'currency', 'updated_at', 'set_pin']
         read_only_fields = fields
+
+    def get_set_pin(self, obj):
+        return bool(obj.pin)
 
 
 # Add Funds Serializer
@@ -62,23 +64,29 @@ class ChildWalletSerializer(serializers.ModelSerializer):
 # Transaction Serializer
 class TransactionSerializer(serializers.ModelSerializer):
     family_wallet_id = serializers.UUIDField(source='parent.family_wallet.id', read_only=True)
-    child_id = serializers.UUIDField(source='child.id') 
-    child_name = serializers.CharField(source='child.name', read_only=True)
+    child_id = serializers.SerializerMethodField()
+    child_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Transaction
         fields = [
-            'id', 'family_wallet_id','child_id', 
+            'id', 'family_wallet_id', 'child_id', 
             'child_name',
             'type', 'amount', 'status',
             'description', 'created_at', 'completed_at'
         ]
         read_only_fields = ['id', 'family_wallet_id', 'created_at', 'completed_at']
 
+    def get_child_id(self, obj):
+        return str(obj.child.id) if obj.child else None
+
+    def get_child_name(self, obj):
+        return obj.child.name if obj.child else "Unknown"
+
     def create(self, validated_data):
         child_id = validated_data.pop('child')['id'] if 'child' in validated_data else validated_data.pop('child_id', None)
         child = Child.objects.get(id=child_id)
         validated_data['child'] = child
-        # Set parent from request user to avoid null parent_id
         validated_data['parent'] = self.context['request'].user
         return super().create(validated_data)
 
@@ -229,3 +237,25 @@ class AllowanceSerializer(serializers.ModelSerializer):
             child = Child.objects.get(id=child_id)
             validated_data['child'] = child
         return super().update(instance, validated_data)
+
+class SavingsBreakdownSerializer(serializers.Serializer):
+    reward_saved = serializers.CharField()
+    reward_spent = serializers.CharField()
+
+
+class RecentActivitySerializer(serializers.Serializer):
+    activity = serializers.CharField()
+    amount = serializers.CharField()
+    status = serializers.CharField()
+    date = serializers.CharField()
+
+
+class EarningMeterSerializer(serializers.Serializer):
+    total_earned = serializers.CharField()
+    total_saved = serializers.CharField()
+    total_spent = serializers.CharField()
+    savings_breakdown = SavingsBreakdownSerializer()
+    earnings_over_time = serializers.DictField(
+        child=serializers.CharField()
+    )
+    recent_activities = RecentActivitySerializer(many=True)

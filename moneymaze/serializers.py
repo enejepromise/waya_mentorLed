@@ -1,23 +1,40 @@
 from rest_framework import serializers
 from decimal import Decimal
-from django.db import transaction as db_transaction
-
 from .models import (
     Concept, ConceptProgress, Quiz, Question,
-    AnswerChoice, QuizResult, Reward, RewardEarned
+    AnswerChoice, QuizResult, Reward, RewardEarned,
+    WeeklyStreak, ConceptSection, SectionProgress
 )
 
+# Concept Section + Progress
+class ConceptSectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConceptSection
+        fields = ['id', 'concept', 'title', 'content', 'order']
+
+
+class SectionProgressSerializer(serializers.ModelSerializer):
+    section = ConceptSectionSerializer(read_only=True)
+
+    class Meta:
+        model = SectionProgress
+        fields = ['id', 'child', 'section', 'viewed', 'viewed_at']
+
+
+# Concept Serializer (with Sections)
 class ConceptSerializer(serializers.ModelSerializer):
+    sections = ConceptSectionSerializer(many=True, read_only=True)
+
     class Meta:
         model = Concept
-        fields = ['id', 'title', 'description','level']
+        fields = ['id', 'title', 'description', 'level', 'sections']
 
     def validate_title(self, value):
         if Concept.objects.filter(title__iexact=value.strip()).exists():
             raise serializers.ValidationError("A concept with this title already exists.")
         return value
 
-
+# Concept Progress
 class ConceptProgressSerializer(serializers.ModelSerializer):
     concept = ConceptSerializer(read_only=True)
 
@@ -27,6 +44,7 @@ class ConceptProgressSerializer(serializers.ModelSerializer):
         read_only_fields = ['child']
 
 
+#  Quiz / Question / Answer
 class AnswerChoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnswerChoice
@@ -40,10 +58,8 @@ class AnswerChoiceSerializer(serializers.ModelSerializer):
         if AnswerChoice.objects.filter(question=question, text__iexact=text).exists():
             raise serializers.ValidationError("This answer already exists for this question.")
 
-        if is_correct:
-            # Ensure only one correct answer per question
-            if AnswerChoice.objects.filter(question=question, is_correct=True).exists():
-                raise serializers.ValidationError("This question already has a correct answer.")
+        if is_correct and AnswerChoice.objects.filter(question=question, is_correct=True).exists():
+            raise serializers.ValidationError("This question already has a correct answer.")
 
         return data
 
@@ -84,20 +100,17 @@ class QuizSubmissionSerializer(serializers.Serializer):
         quiz_id = data.get('quiz_id')
         answers = data.get('answers')
 
-        # Validate quiz exists
         try:
             quiz = Quiz.objects.get(id=quiz_id)
         except Quiz.DoesNotExist:
             raise serializers.ValidationError("Quiz does not exist.")
 
-        # Validate all question_ids belong to quiz
         quiz_question_ids = set(quiz.questions.values_list('id', flat=True))
         submitted_question_ids = set(answers.keys())
 
         if not submitted_question_ids.issubset(quiz_question_ids):
             raise serializers.ValidationError("One or more questions do not belong to the quiz.")
 
-        # Validate answer choices belong to respective questions
         for question_id, answer_choice_id in answers.items():
             try:
                 answer_choice = AnswerChoice.objects.get(id=answer_choice_id)
@@ -105,7 +118,9 @@ class QuizSubmissionSerializer(serializers.Serializer):
                 raise serializers.ValidationError(f"Answer choice {answer_choice_id} does not exist.")
 
             if str(answer_choice.question_id) != question_id:
-                raise serializers.ValidationError(f"Answer choice {answer_choice_id} does not belong to question {question_id}.")
+                raise serializers.ValidationError(
+                    f"Answer choice {answer_choice_id} does not belong to question {question_id}."
+                )
 
         return data
 
@@ -119,6 +134,7 @@ class QuizResultSerializer(serializers.ModelSerializer):
         read_only_fields = ['child', 'score', 'passed', 'taken_on']
 
 
+# Rewards
 class RewardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reward
@@ -132,8 +148,18 @@ class RewardEarnedSerializer(serializers.ModelSerializer):
         model = RewardEarned
         fields = ['id', 'child', 'reward', 'earned_on']
         read_only_fields = ['child', 'earned_on']
+
+
+# Dashboard
 class DashboardSerializer(serializers.Serializer):
     concepts_completed = serializers.IntegerField()
     total_concepts = serializers.IntegerField()
     progress_percentage = serializers.FloatField()
     rewards_earned = serializers.IntegerField()
+
+
+# Weekly Streak
+class WeeklyStreakSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WeeklyStreak
+        fields = ['week_start_date', 'streak']

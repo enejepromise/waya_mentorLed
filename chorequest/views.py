@@ -17,6 +17,8 @@ from taskmaster.serializers import (
 from taskmaster.models import notify_parent_realtime
 
 
+from taskmaster.permissions import IsParentOrChildViewingOwnChores
+
 class ChildChoreListView(generics.ListAPIView):
     """
     GET /api/chorequest/chores/?childId=<uuid>&status=pending|completed
@@ -25,20 +27,20 @@ class ChildChoreListView(generics.ListAPIView):
     Children can see both pending and completed chores, including their rewards.
     """
     serializer_class = ChoreReadSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsParentOrChildViewingOwnChores]
 
     def get_queryset(self):
         user = self.request.user
         child_id = self.request.query_params.get("childId")
 
-        # Verify logged-in user is the child with this childId
+        if not child_id:
+            from rest_framework.exceptions import ParseError
+            raise ParseError("childId query parameter is required.")
+
         try:
-            child = Child.objects.get(username=user.email)
+            child = Child.objects.get(id=child_id, parent=user)
         except Child.DoesNotExist:
             raise PermissionDenied("You do not have permission to view chores.")
-
-        if not child_id or str(child.id) != child_id:
-            raise PermissionDenied("You do not have permission to view this child's chores.")
 
         queryset = Chore.objects.filter(assigned_to=child)
 
@@ -47,7 +49,24 @@ class ChildChoreListView(generics.ListAPIView):
             queryset = queryset.filter(status=status_filter)
 
         return queryset
+    
+def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
 
+        # Get total achievements before pagination
+        total_completed = Chore.objects.filter(
+            assigned_to=self.child,
+            status=Chore.STATUS_COMPLETED
+        ).count()
+
+        serializer = self.get_serializer(page, many=True)
+        return self.get_paginated_response({
+            'statistics': {
+                'total_achievements': total_completed
+            },
+            'results': serializer.data
+        })
 
 class ChildChoreStatusUpdateView(generics.UpdateAPIView):
     """

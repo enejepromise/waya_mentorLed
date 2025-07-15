@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'settings_waya',
     'chorequest',
     'goalgetter',
+    'earningmeter',
 
    # 'drf_yasg',
     'rest_framework',
@@ -85,6 +86,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'channels',
+    'nested_admin',
 
     'django.contrib.sites',  # Required for allauth(Google auto login)
     'allauth',
@@ -107,6 +109,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'children.middleware.AttachChildFromHeaderMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',

@@ -23,6 +23,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('nested_admin/', include('nested_admin.urls')),
 
     # CORRECTED API URLS:
     # Each API path now explicitly starts with 'api/' at the top level
@@ -36,6 +37,8 @@ urlpatterns = [
     path('api/moneymaze/', include('moneymaze.urls')),
     path('api/goalgetter/', include('goalgetter.urls')),
     path('api/settings_waya/', include('settings_waya.urls')),
+    path('api/earningmeter/', include('earningmeter.urls')),
+    
 
 
      # IMPORTANT: Corrected these paths.
