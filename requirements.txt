@@ -30,6 +30,8 @@ djangorestframework==3.16.0
 djangorestframework_simplejwt==5.5.0
 drf-spectacular==0.28.0
 ecdsa==0.19.1
+git+https://github.com/theatlantic/django-nested-admin.git#egg=django-nested-admin
+
 git-filter-repo==2.47.0
 google-auth==2.40.1
 google-auth-oauthlib==1.2.2
