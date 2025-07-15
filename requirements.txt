@@ -42,7 +42,6 @@ jsonschema==4.24.0
 jsonschema-specifications==2025.4.1
 kombu==5.5.3
 MarkupSafe==3.0.2
-django-nested-admin==3.0.1
 oauthlib==3.2.2
 packaging==25.0
 pillow==11.2.1
