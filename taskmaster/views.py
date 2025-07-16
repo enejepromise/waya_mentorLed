@@ -64,7 +64,6 @@ class ChoreListView(generics.ListAPIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class ChoreDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     GET /api/chores/{choreId}/ — Chore detail  
@@ -119,20 +118,16 @@ class ChoreStatusUpdateView(generics.UpdateAPIView):
         except Exception as e:
             return Response({"detail": f"Server error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+from .permissions import IsParentOrChildViewingOwnChores
 
 class ChildChoreListView(generics.ListAPIView):
     """
     GET /api/children/chores/?childId=<uuid>
-
-    - If the request comes from a **parent**, they must pass a `childId` that belongs to them.
-    - If the request comes from a **child**, the parent is still the `request.user`,
-      but we must use the `childId` returned during login to filter their chores.
     """
     serializer_class = ChoreReadSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsParentOrChildViewingOwnChores]
 
     def get_queryset(self):
-        user = self.request.user
         child_id = self.request.query_params.get("childId")
 
         if not child_id:
@@ -143,18 +138,11 @@ class ChildChoreListView(generics.ListAPIView):
         except Child.DoesNotExist:
             raise PermissionDenied("Child not found.")
 
-        # Enforce that only the child's parent can access it
-        if child.parent != user:
-            raise PermissionDenied("You do not have access to this child's chores.")
-
         return Chore.objects.filter(assigned_to=child)
 
 
 
 class ChildChoreStatusUpdateView(generics.UpdateAPIView):
-    """
-    PATCH — Child updates their own chore status
-    """
     serializer_class = ChoreStatusUpdateSerializer
     permission_classes = [permissions.IsAuthenticated, IsChildAssignedToChore]
     queryset = Chore.objects.all()

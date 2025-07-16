@@ -17,6 +17,7 @@ class UserManager(BaseUserManager):
         email = self.normalize_email(email).lower()
         user = self.model(email=email, full_name=full_name, **extra_fields)
         user.set_password(password)
+        user.role = User.ROLE_PARENT  # Force role to parent
         user.save(using=self._db)
         return user
 
@@ -36,10 +37,9 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     ROLE_PARENT = 'parent'
-    ROLE_CHILD = 'child'
+
     ROLE_CHOICES = [
         (ROLE_PARENT, 'Parent'),
-        (ROLE_CHILD, 'Child'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -76,8 +76,6 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.full_name} ({self.role.capitalize()})"
-
-
 class EmailVerification(models.Model):
     """
     Stores email verification tokens for users.

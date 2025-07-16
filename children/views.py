@@ -85,17 +85,23 @@ class ChildLoginView(generics.GenericAPIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        if child.check_pin(pin):
-            refresh = RefreshToken.for_user(child.parent)
-            return Response({
-                'childId': str(child.id),
-                'childUsername': child.username,
-                'parentId': str(child.parent.id),
-                'token': str(refresh.access_token),
-                'refresh': str(refresh),
-            })
+        if not child.check_pin(pin):
+            return Response(
+                {"detail": "Invalid credentials"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
 
-        return Response(
-            {"detail": "Invalid credentials"},
-            status=status.HTTP_401_UNAUTHORIZED
-        )
+        # Create child-specific JWT tokens manually
+        refresh = RefreshToken()
+        refresh['child_id'] = str(child.id)
+        refresh['child_username'] = child.username
+        # Add any additional custom claims as needed here
+
+        access_token = refresh.access_token
+
+        return Response({
+            'childId': str(child.id),
+            'childUsername': child.username,
+            'token': str(access_token),
+            'refresh': str(refresh),
+        })

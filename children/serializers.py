@@ -90,14 +90,17 @@ class ChildLoginSerializer(serializers.Serializer):
     def validate(self, data):
         username = data.get('username')
         pin = data.get('pin')
+
+        if not username or not pin:
+            raise serializers.ValidationError("Both username and PIN are required.")
+
         try:
             child = Child.objects.get(username=username)
         except Child.DoesNotExist:
             raise serializers.ValidationError("Invalid username or PIN.")
+
         if not child.check_pin(pin):
             raise serializers.ValidationError("Invalid username or PIN.")
+
         data['child'] = child
         return data
-class ChildDeleteView(generics.DestroyAPIView):
-    queryset = Child.objects.all()
-    serializer_class = ChildSerializer

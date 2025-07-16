@@ -1,185 +1,75 @@
-from taskmaster.permissions import IsChildAssignedToChore
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from taskmaster.serializers import RedeemRewardSerializer
-from rest_framework.exceptions import PermissionDenied
-from rest_framework import generics, permissions, status
+from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
+from rest_framework.decorators import action
 from taskmaster.models import Chore
-from children.models import Child
-from django.db import transaction as db_transaction
-from goalgetter.models import Goal
-from notifications.models import Notification
-from taskmaster.serializers import (
-    ChoreReadSerializer,
-    ChoreStatusUpdateSerializer,
+from .serializers import (
+    ChoreQuestSerializer,
+    CompleteChoreSerializer,
+    RedeemRewardSerializer
 )
-from taskmaster.models import notify_parent_realtime
+from .permissions import IsChild
+from django.utils import timezone
+from notifications.utils import send_notification, notify_parent_realtime
 
 
-from taskmaster.permissions import IsParentOrChildViewingOwnChores
-
-class ChildChoreListView(generics.ListAPIView):
+class ChoreQuestViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    GET /api/chorequest/chores/?childId=<uuid>&status=pending|completed
-
-    Returns list of chores assigned to a specific child.
-    Children can see both pending and completed chores, including their rewards.
+    Viewset for the child dashboard to list, complete, and redeem chores.
+    Authenticated via ChildAuthentication.
     """
-    serializer_class = ChoreReadSerializer
-    permission_classes = [permissions.IsAuthenticated, IsParentOrChildViewingOwnChores]
+    serializer_class = ChoreQuestSerializer
+    permission_classes = [IsChild]
 
     def get_queryset(self):
-        user = self.request.user
-        child_id = self.request.query_params.get("childId")
+        # Use request.child set by ChildAuthentication
+        return Chore.objects.filter(assigned_to=self.request.child)
 
-        if not child_id:
-            from rest_framework.exceptions import ParseError
-            raise ParseError("childId query parameter is required.")
+    @action(detail=False, methods=['post'], url_path='complete')
+    def mark_complete(self, request):
+        serializer = CompleteChoreSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            chore = serializer.validated_data['chore']
+            if chore.assigned_to != request.child:
+                return Response({'error': 'You can only complete your own chores.'}, status=status.HTTP_403_FORBIDDEN)
 
-        try:
-            child = Child.objects.get(id=child_id, parent=user)
-        except Child.DoesNotExist:
-            raise PermissionDenied("You do not have permission to view chores.")
+            chore.status = 'completed'
+            chore.completed_at = timezone.now()
+            chore.save()
 
-        queryset = Chore.objects.filter(assigned_to=child)
+            # Notify parent in real-time
+            parent_user = request.user  # request.user is the parent, per ChildAuthentication
+            notify_parent_realtime(parent_user, f"{request.child.name} completed the chore '{chore.title}'", chore_id=chore.id)
 
-        status_filter = self.request.query_params.get("status")
-        if status_filter in [Chore.STATUS_PENDING, Chore.STATUS_COMPLETED, Chore.STATUS_MISSED]:
-            queryset = queryset.filter(status=status_filter)
+            return Response({'message': 'Chore marked as completed. Parent has been notified.'}, status=status.HTTP_200_OK)
 
-        return queryset
-    
-def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get total achievements before pagination
-        total_completed = Chore.objects.filter(
-            assigned_to=self.child,
-            status=Chore.STATUS_COMPLETED
-        ).count()
+    @action(detail=False, methods=['post'], url_path='redeem')
+    def redeem_reward(self, request):
+        serializer = RedeemRewardSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            chore = serializer.validated_data['chore']
 
-        serializer = self.get_serializer(page, many=True)
-        return self.get_paginated_response({
-            'statistics': {
-                'total_achievements': total_completed
-            },
-            'results': serializer.data
-        })
+            if chore.assigned_to != request.child:
+                return Response({'error': 'You can only redeem your own chores.'}, status=status.HTTP_403_FORBIDDEN)
 
-class ChildChoreStatusUpdateView(generics.UpdateAPIView):
-    """
-    PATCH /api/chorequest/chores/<chore_id>/status/
+            if chore.status != 'approved':
+                return Response({'error': 'Chore reward is not yet approved by your parent.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    Allows a child to mark their chore as completed.
-    Sends notification to the parent when completed.
-    """
-    serializer_class = ChoreStatusUpdateSerializer
-    permission_classes = [permissions.IsAuthenticated, IsChildAssignedToChore]
-    queryset = Chore.objects.all()
+            # update chore status
+            chore.status = 'rewarded'
+            chore.save()
 
-    def get_object(self):
-        chore = super().get_object()
-        self.check_object_permissions(self.request, chore)
-        return chore
+            # reward added to child wallet
+            wallet = chore.assigned_to.wallet
+            wallet.earn(chore.reward)
 
-    def patch(self, request, *args, **kwargs):
-        instance = self.get_object()
-        previous_status = instance.status
-        response = super().patch(request, *args, **kwargs)
-
-        if instance.status == Chore.STATUS_COMPLETED and previous_status != Chore.STATUS_COMPLETED:
-            Notification.objects.create(
-                parent=instance.parent,
-                type="chore_completed",
-                title="Chore Completed",
-                message=f"{instance.assigned_to.username} completed '{instance.title}'",
-                related_id=instance.id
-            )
-            notify_parent_realtime(
-                instance.parent,
-                f"{instance.assigned_to.username} completed '{instance.title}'",
-                instance.id
-            )
-
-        return response
-
-
-class RedeemRewardView(APIView):
-    serializer_class = RedeemRewardSerializer  
-    permission_classes = [IsAuthenticated, IsChildAssignedToChore]
-
-    def patch(self, request, chore_id):
-        try:
-            chore = Chore.objects.get(id=chore_id)
-            self.check_object_permissions(request, chore)
-
-            if chore.status != Chore.STATUS_COMPLETED:
-                return Response({"detail": "Chore must be completed before redeeming."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            if chore.is_redeemed:
-                return Response({"detail": "Reward already redeemed."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            # Begin atomic transaction to ensure consistency
-            with db_transaction.atomic():
-                family_wallet = chore.parent.family_wallet
-                child_wallet = chore.assigned_to.wallet
-                reward_amount = chore.reward
-
-                if reward_amount > family_wallet.balance:
-                    return Response({"detail": "Insufficient funds in family wallet."},
-                                    status=status.HTTP_400_BAD_REQUEST)
-
-                # Deduct from family wallet and create transaction
-                transaction_obj = family_wallet.create_reward_transaction(
-                    child=chore.assigned_to,
-                    amount=reward_amount,
-                    description=f"Reward for chore '{chore.title}'"
-                )
-
-                # Credit child's wallet
-                child_wallet.earn(reward_amount)
-
-                # Mark chore as redeemed
-                chore.is_redeemed = True
-                chore.save()
-
-                # Create notification & realtime notify parent
-                Notification.objects.create(
-                    parent=chore.parent,
-                    type="chore_reward_redeemed",
-                    title="Reward Redeemed",
-                    message=f"{chore.assigned_to.username} redeemed reward for '{chore.title}'",
-                    related_id=chore.id
-                )
-                notify_parent_realtime(
-                    chore.parent,
-                    f"{chore.assigned_to.username} redeemed reward for '{chore.title}'",
-                    chore.id
-                )
-
-                # Check and update child's active goals
-                active_goals = Goal.objects.filter(child=chore.assigned_to, status='active')
-                for goal in active_goals:
-                    goal.check_achievement()
+            # Notify child
+            send_notification(request.child.user, f"Reward for completing the chore '{chore.title}' has been added to your wallet!")
 
             return Response({
-                "detail": "Reward redeemed successfully.",
-                "chore": {
-                    "title": chore.title,
-                    "reward": reward_amount,
-                    "is_redeemed": chore.is_redeemed
-                },
-                "transaction_id": transaction_obj.id,
-                "new_child_balance": child_wallet.balance
+                'message': f"Reward of ₦{chore.reward} added to your wallet!",
+                'new_balance': wallet.balance
             }, status=status.HTTP_200_OK)
 
-        except Chore.DoesNotExist:
-            return Response({"detail": "Chore not found."},
-                            status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({"detail": f"Server error: {str(e)}"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

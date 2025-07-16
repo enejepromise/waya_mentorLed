@@ -17,6 +17,8 @@ class ChoreCreateUpdateSerializer(serializers.ModelSerializer):
             'status',
             'created_at',
             'completed_at',
+            'category',
+            'is_redeemed',
         )
         read_only_fields = ('id', 'status', 'created_at', 'completed_at')
 
@@ -59,13 +61,14 @@ class ChoreStatusUpdateSerializer(serializers.ModelSerializer):
 
 class ChoreReadSerializer(serializers.ModelSerializer):
     assignedTo = serializers.UUIDField(source='assigned_to.id')
-    assignedToName = serializers.CharField(source='assigned_to.name')
+    # Remove or fix assignedToName depending on your Child model
+    # assignedToName = serializers.CharField(source='assigned_to.name', default='') # Uncomment if Child has .name
     assignedToUsername = serializers.CharField(source='assigned_to.username')
     parentId = serializers.UUIDField(source='parent.id')
     amount = serializers.DecimalField(source='reward', max_digits=10, decimal_places=2)
     createdAt = serializers.DateTimeField(source='created_at')
-    completedAt = serializers.DateTimeField(source='completed_at')
-    category = serializers.CharField(required=False, allow_blank=True)  # Removed source='category'
+    completedAt = serializers.DateTimeField(source='completed_at', allow_null=True)  # may be null
+    category = serializers.CharField(required=False, allow_blank=True)
     isRedeemed = serializers.BooleanField(source='is_redeemed')
 
     class Meta:
@@ -75,7 +78,7 @@ class ChoreReadSerializer(serializers.ModelSerializer):
             'title',
             'description',
             'assignedTo',
-            'assignedToName',
+            # 'assignedToName',  # Remove if no `name` field on Child model
             'assignedToUsername',
             'status',
             'amount',
@@ -83,9 +86,8 @@ class ChoreReadSerializer(serializers.ModelSerializer):
             'completedAt',
             'parentId',
             'category',
-            'isRedeemed',
+            'isRedeemed',   # Must match serializer field name exactly (capital R)
         )
-
 
 class RedeemRewardSerializer(serializers.ModelSerializer):
     amount = serializers.DecimalField(source='reward', max_digits=10, decimal_places=2)

@@ -5,25 +5,28 @@ from django.utils import timezone
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
+
 class Chore(models.Model):
     STATUS_PENDING = 'pending'
     STATUS_COMPLETED = 'completed'
     STATUS_MISSED = 'missed'
+    STATUS_APPROVED = 'approved'
 
     STATUS_CHOICES = [
         (STATUS_PENDING, 'Pending'),
         (STATUS_COMPLETED, 'Completed'),
         (STATUS_MISSED, 'Missed'),
+        (STATUS_APPROVED, 'Approved'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     reward = models.DecimalField(max_digits=10, decimal_places=2)
-    category = models.CharField(max_length=50, default='Household') 
+    category = models.CharField(max_length=50, default='Household')
     due_date = models.DateField()
     is_redeemed = models.BooleanField(default=False)
-    # Align with Child model
+
     assigned_to = models.ForeignKey(
         Child,
         related_name='chores',
@@ -41,7 +44,6 @@ class Chore(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        # Automatically update completed_at timestamp
         if self.status == self.STATUS_COMPLETED and self.completed_at is None:
             self.completed_at = timezone.now()
         elif self.status != self.STATUS_COMPLETED:
@@ -49,8 +51,8 @@ class Chore(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        # Uses the Child model’s __str__ output
         return f"{self.title} ({self.status}) for {self.assigned_to}"
+
 
 def notify_parent_realtime(user, message, chore_id):
     """
