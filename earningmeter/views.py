@@ -188,3 +188,30 @@ class SummaryView(APIView):
             return Response(serializer.data, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
+from earningmeter.serializers import EarningTotalsSerializer
+from drf_spectacular.utils import extend_schema
+
+class EarningTotalsView(APIView):
+    """
+    Always returns the authenticated child's total earned, saved, and spent.
+    """
+    authentication_classes = [ChildJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=EarningTotalsSerializer)
+    def get(self, request):
+        child = request.user
+        try:
+            wallet = child.wallet
+        except ChildWallet.DoesNotExist:
+            return Response({"error": "Child wallet not found."}, status=404)
+
+        data = {
+            "total_earned": wallet.total_earned,
+            "total_saved": wallet.balance,
+            "total_spent": wallet.total_spent,
+        }
+        serializer = EarningTotalsSerializer(data)
+        return Response(serializer.data, status=200)

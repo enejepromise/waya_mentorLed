@@ -20,3 +20,9 @@ class SummarySerializer(serializers.Serializer):
     bar_chart = BarChartItemSerializer(many=True)
     pie_chart = PieChartSerializer()
     recent_activities = ActivityItemSerializer(many=True)
+
+
+class EarningTotalsSerializer(serializers.Serializer):
+    total_earned = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_saved = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_spent = serializers.DecimalField(max_digits=12, decimal_places=2)
