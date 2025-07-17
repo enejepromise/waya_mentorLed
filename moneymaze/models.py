@@ -20,7 +20,6 @@ class Concept(models.Model):
         return f"Lesson {self.level}: {self.title}"
 
 
-# ✅ NEW: ConceptSection = content divided into pages/steps
 class ConceptSection(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='sections')
@@ -34,8 +33,6 @@ class ConceptSection(models.Model):
     def __str__(self):
         return f"{self.concept.title} - {self.title}"
 
-
-# ✅ NEW: Track which sections each child has viewed
 class SectionProgress(models.Model):
     child = models.ForeignKey('children.Child', on_delete=models.CASCADE, related_name='section_progress')
     section = models.ForeignKey(ConceptSection, on_delete=models.CASCADE, related_name='viewed_by')

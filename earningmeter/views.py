@@ -1,156 +1,190 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from children.authentication import ChildJWTAuthentication
 from django.utils import timezone
 from collections import defaultdict
 from decimal import Decimal
 
 from familywallet.models import ChildWallet, Transaction
-from familywallet.serializers import EarningMeterSerializer  
-from children.models import Child
-
+from earningmeter.serializers import SummarySerializer  # or .serializers if needed
 
 class EarningMeterView(APIView):
-    # Removed all permissions so this view is open to anyone
-    permission_classes = []  
+    """
+    Child dashboard: Shows bar/pie charts + recent activities for the authenticated child.
+    """
+    authentication_classes = [ChildJWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        responses=EarningMeterSerializer  
+        responses=SummarySerializer
     )
     def get(self, request):
         try:
-            # You need a way to identify the child since request.user is not guaranteed now.
-            # For example, get child ID from query params: /api/earning-meter/?child_id=abc123
-            child_id = request.query_params.get('child_id')
-
-            if not child_id:
-                return Response({"error": "child_id is required as a query parameter."}, status=400)
-
+            child = request.user
             try:
-                child = Child.objects.get(id=child_id)
-            except Child.DoesNotExist:
-                return Response({"error": "Child not found."}, status=404)
-
-            wallet = child.wallet
+                wallet = child.wallet
+            except ChildWallet.DoesNotExist:
+                return Response({"error": "Child wallet not found."}, status=404)
 
             total_earned = wallet.total_earned
             total_saved = wallet.balance
             total_spent = wallet.total_spent
 
-            savings_breakdown = {
-                "reward_saved": str(total_saved),
-                "reward_spent": str(total_spent)
-            }
-
+            # --- Bar chart earned/spent logic for last 7 days ---
             last_7_days = timezone.now() - timezone.timedelta(days=7)
-            transactions = Transaction.objects.filter(
+            earned_qs = Transaction.objects.filter(
                 child=child,
                 type="chore_reward",
                 status="paid",
                 created_at__gte=last_7_days
-            ).order_by('-created_at')
+            )
+            spent_qs = Transaction.objects.filter(
+                child=child,
+                type="debit",
+                status="paid",
+                created_at__gte=last_7_days
+            )
 
-            earnings_over_time = defaultdict(Decimal)
-            recent_activities = []
+            earned_per_day = defaultdict(Decimal)
+            spent_per_day = defaultdict(Decimal)
+            for tx in earned_qs:
+                date_str = tx.created_at.strftime("%b %d")
+                earned_per_day[date_str] += tx.amount
+            for tx in spent_qs:
+                date_str = tx.created_at.strftime("%b %d")
+                spent_per_day[date_str] += tx.amount
 
-            for tx in transactions:
-                date_str = tx.created_at.strftime("%Y-%m-%d")
-                earnings_over_time[date_str] += tx.amount
-                recent_activities.append({
-                    "activity": tx.description,
-                    "amount": str(tx.amount),
-                    "status": tx.status,
-                    "date": tx.created_at.strftime("%d-%B-%Y")
-                })
+            bar_chart_days = sorted(set(list(earned_per_day.keys()) + list(spent_per_day.keys())))
+            bar_chart_list = [
+                {
+                    "day": day,
+                    "earned": earned_per_day.get(day, Decimal("0.00")),
+                    "spent": spent_per_day.get(day, Decimal("0.00")),
+                }
+                for day in bar_chart_days
+            ]
 
-            data = {
-                "total_earned": str(total_earned),
-                "total_saved": str(total_saved),
-                "total_spent": str(total_spent),
-                "savings_breakdown": savings_breakdown,
-                "earnings_over_time": {k: str(v) for k, v in earnings_over_time.items()},
-                "recent_activities": recent_activities[:5]
+            pie_chart = {
+                "reward_saved": total_saved,
+                "reward_spent": total_spent
             }
 
-            return Response(data, status=200)
+            recent_activities = []
+            tx_qs = Transaction.objects.filter(child=child).order_by('-created_at')[:5]
+            for tx in tx_qs:
+                if tx.status == "paid":
+                    status_str = "saved" if tx.type in ("chore_reward", "credit") else "spent"
+                elif tx.status == "pending":
+                    status_str = "processing"
+                elif tx.type == "debit":
+                    status_str = "spent"
+                else:
+                    status_str = tx.status
+                amount_fmt = f"NGN {tx.amount:.2f}"
+                recent_activities.append({
+                    "name": child.name,
+                    "activity": tx.description,
+                    "amount": amount_fmt,
+                    "status": status_str,
+                    "date": tx.created_at.strftime('%d-%B-%Y')
+                })
 
-        except ChildWallet.DoesNotExist:
-            return Response({"error": "Child wallet not found."}, status=404)
+            serializer = SummarySerializer({
+                "bar_chart": bar_chart_list,
+                "pie_chart": pie_chart,
+                "recent_activities": recent_activities
+            })
+            return Response(serializer.data, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
 class SummaryView(APIView):
-    permission_classes = []
+    """
+    Weekly summary only: also shows earned/spent per day and pie chart for child in last 7d.
+    """
+    authentication_classes = [ChildJWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        description="Weekly summary for barchart and pie chart (reward earned/spent/saved)",
-        responses=dict  # You can later plug in a serializer if needed
+        responses=SummarySerializer
     )
     def get(self, request):
-        child_id = request.query_params.get("child_id")
-
-        if not child_id:
-            return Response({"error": "child_id is required"}, status=400)
-
         try:
-            child = Child.objects.get(id=child_id)
-        except Child.DoesNotExist:
-            return Response({"error": "Child not found"}, status=404)
+            child = request.user
+            try:
+                wallet = child.wallet
+            except ChildWallet.DoesNotExist:
+                return Response({"error": "Child wallet not found."}, status=404)
 
-        try:
             now = timezone.now()
             seven_days_ago = now - timezone.timedelta(days=7)
 
-            # Bar chart: reward earned per day
-            earned_transactions = Transaction.objects.filter(
+            earned_qs = Transaction.objects.filter(
                 child=child,
                 type="chore_reward",
                 status="paid",
                 created_at__gte=seven_days_ago
             )
-
-            spent_transactions = Transaction.objects.filter(
+            spent_qs = Transaction.objects.filter(
                 child=child,
-                type="debit",  # assuming "debit" is the spent transaction type
+                type="debit",
                 status="paid",
                 created_at__gte=seven_days_ago
             )
 
             daily_earned = defaultdict(Decimal)
             daily_spent = defaultdict(Decimal)
+            for tx in earned_qs:
+                day = tx.created_at.strftime("%b %d")
+                daily_earned[day] += tx.amount
+            for tx in spent_qs:
+                day = tx.created_at.strftime("%b %d")
+                daily_spent[day] += tx.amount
 
-            for tx in earned_transactions:
-                date = tx.created_at.strftime("%b %d")  # e.g., "Apr 20"
-                daily_earned[date] += tx.amount
+            chart_labels = sorted(set(daily_earned.keys()) | set(daily_spent.keys()))
+            bar_chart_list = [
+                {
+                    "day": day,
+                    "earned": daily_earned.get(day, Decimal("0.00")),
+                    "spent": daily_spent.get(day, Decimal("0.00")),
+                }
+                for day in chart_labels
+            ]
 
-            for tx in spent_transactions:
-                date = tx.created_at.strftime("%b %d")
-                daily_spent[date] += tx.amount
-
-            # Prepare bar chart data
-            chart_labels = list({*daily_earned.keys(), *daily_spent.keys()})
-            chart_labels.sort()  # optional, to sort by day name
-
-            bar_chart_data = {
-                "labels": chart_labels,
-                "earned": [float(daily_earned.get(day, 0)) for day in chart_labels],
-                "spent": [float(daily_spent.get(day, 0)) for day in chart_labels]
+            pie_chart = {
+                "reward_saved": wallet.balance,
+                "reward_spent": wallet.total_spent
             }
 
-            # Pie chart: total reward saved vs spent
-            wallet = child.wallet
-            total_saved = wallet.balance
-            total_spent = wallet.total_spent
+            # Recent activities (same pattern)
+            recent_activities = []
+            tx_qs = Transaction.objects.filter(child=child).order_by('-created_at')[:5]
+            for tx in tx_qs:
+                if tx.status == "paid":
+                    status_str = "saved" if tx.type in ("chore_reward", "credit") else "spent"
+                elif tx.status == "pending":
+                    status_str = "processing"
+                elif tx.type == "debit":
+                    status_str = "spent"
+                else:
+                    status_str = tx.status
+                amount_fmt = f"NGN {tx.amount:.2f}"
+                recent_activities.append({
+                    "name": child.name,
+                    "activity": tx.description,
+                    "amount": amount_fmt,
+                    "status": status_str,
+                    "date": tx.created_at.strftime('%d-%B-%Y')
+                })
 
-            pie_chart_data = {
-                "reward_saved": float(total_saved),
-                "reward_spent": float(total_spent)
-            }
-
-            return Response({
-                "bar_chart": bar_chart_data,
-                "pie_chart": pie_chart_data
-            }, status=200)
-
+            serializer = SummarySerializer({
+                "bar_chart": bar_chart_list,
+                "pie_chart": pie_chart,
+                "recent_activities": recent_activities
+            })
+            return Response(serializer.data, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=500)

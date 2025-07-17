@@ -80,7 +80,6 @@ class ChoreDetailView(generics.RetrieveUpdateDestroyAPIView):
             return ChoreReadSerializer
         return ChoreCreateUpdateSerializer
 
-
 class ChoreStatusUpdateView(generics.UpdateAPIView):
     serializer_class = ChoreStatusUpdateSerializer
     permission_classes = [permissions.IsAuthenticated, IsParentOfChore]
