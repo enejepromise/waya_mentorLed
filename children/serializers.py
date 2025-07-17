@@ -1,6 +1,4 @@
 from rest_framework import serializers
-from rest_framework import generics
-
 from django.contrib.auth import get_user_model
 from .models import Child
 
@@ -11,7 +9,7 @@ class ChildCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Child
-        fields = ('id', 'username', 'name','pin', 'avatar')  
+        fields = ('id', 'username', 'name', 'pin', 'avatar')
         read_only_fields = ('id',)
 
     def validate_pin(self, value):
@@ -27,16 +25,13 @@ class ChildCreateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        try:
-            pin = validated_data.pop('pin')
-            parent = self.context['request'].user  # Get parent from request context
-            validated_data['parent'] = parent
-            child = Child(**validated_data)
-            child.set_pin(pin)
-            child.save()
-            return child
-        except Exception as e:
-            raise serializers.ValidationError(f"Server error: {str(e)}")
+        pin = validated_data.pop('pin')
+        parent = self.context['request'].user  # Assign parent
+        child = Child(**validated_data)
+        child.parent = parent
+        child.set_pin(pin)
+        child.save()
+        return child
 
 
 class ChildUpdateSerializer(serializers.ModelSerializer):
@@ -60,20 +55,17 @@ class ChildUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
-        try:
-            pin = validated_data.pop('pin', None)
-            if pin:
-                instance.set_pin(pin)
-            return super().update(instance, validated_data)
-        except Exception as e:
-            raise serializers.ValidationError(f"Server error: {str(e)}")
+        pin = validated_data.pop('pin', None)
+        if pin:
+            instance.set_pin(pin)  # Update the PIN securely
+        return super().update(instance, validated_data)
 
 
 class ChildSerializer(serializers.ModelSerializer):
     class Meta:
         model = Child
         fields = ('id', 'parent', 'username', 'name', 'avatar', 'created_at')
-        read_only_fields = ('id', 'created_at')
+        read_only_fields = ('id', 'parent', 'created_at')
 
 
 class ChildLoginSerializer(serializers.Serializer):
@@ -87,9 +79,9 @@ class ChildLoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("PIN must be exactly 4 digits.")
         return value
 
-    def validate(self, data):
-        username = data.get('username')
-        pin = data.get('pin')
+    def validate(self, attrs):
+        username = attrs.get('username')
+        pin = attrs.get('pin')
 
         if not username or not pin:
             raise serializers.ValidationError("Both username and PIN are required.")
@@ -102,5 +94,5 @@ class ChildLoginSerializer(serializers.Serializer):
         if not child.check_pin(pin):
             raise serializers.ValidationError("Invalid username or PIN.")
 
-        data['child'] = child
-        return data
+        attrs['child'] = child
+        return attrs

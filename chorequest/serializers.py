@@ -6,7 +6,7 @@ class ChoreQuestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Chore
-        fields = ['id', 'description', 'status', 'reward', 'child_name', 'completed_at']
+        fields = ['id', 'title', 'description', 'status', 'reward', 'child_name', 'completed_at']
         read_only_fields = ['id', 'child_name', 'reward', 'completed_at', 'status']
 
 

@@ -27,6 +27,7 @@ class Child(models.Model):
 
     def check_pin(self, raw_pin):
         return check_password(raw_pin, self.pin)
+    
 
     def save(self, *args, **kwargs):
         if not self.pin:
@@ -45,3 +46,11 @@ class Child(models.Model):
 
     def __str__(self):
         return f"{self.username} (Child of {self.parent.full_name})"
+
+    @property
+    def pk(self):
+        return self.id
+
+    @property
+    def is_authenticated(self):
+        return True

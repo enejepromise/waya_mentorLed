@@ -44,10 +44,17 @@ class Chore(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        if self.status == self.STATUS_COMPLETED and self.completed_at is None:
-            self.completed_at = timezone.now()
-        elif self.status != self.STATUS_COMPLETED:
-            self.completed_at = None
+        is_new = self._state.adding
+        if not is_new:
+            old = Chore.objects.filter(pk=self.pk).first()
+            if old and old.status != self.status:
+                if self.status == self.STATUS_COMPLETED:
+                    self.completed_at = timezone.now()
+                else:
+                    self.completed_at = None
+        else:
+            if self.status == self.STATUS_COMPLETED and self.completed_at is None:
+                self.completed_at = timezone.now()
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -59,14 +66,17 @@ def notify_parent_realtime(user, message, chore_id):
     Sends a real-time notification to the parent when a chore is completed.
     """
     channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"user_{user.id}",
-        {
-            "type": "send_notification",
-            "content": {
-                "title": "Chore Completed",
-                "message": message,
-                "choreId": str(chore_id),
+    try:
+        async_to_sync(channel_layer.group_send)(
+            f"user_{user.id}",
+            {
+                "type": "send_notification",
+                "content": {
+                    "title": "Chore Completed",
+                    "message": message,
+                    "choreId": str(chore_id),
+                }
             }
-        }
-    )
+        )
+    except Exception as e:
+        pass

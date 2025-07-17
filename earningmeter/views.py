@@ -1,28 +1,37 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, permissions
+from rest_framework import status
 from django.utils import timezone
 from collections import defaultdict
 from decimal import Decimal
 
 from familywallet.models import ChildWallet, Transaction
-from familywallet.serializers import EarningMeterSerializer  # ✅ import
+from familywallet.serializers import EarningMeterSerializer  
 from children.models import Child
 
 
 class EarningMeterView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    # Removed all permissions so this view is open to anyone
+    permission_classes = []  
 
     @extend_schema(
-        responses=EarningMeterSerializer  # ✅ tells drf-spectacular what to expect
+        responses=EarningMeterSerializer  
     )
     def get(self, request):
         try:
-            if not hasattr(request.user, "child"):
-                return Response({"error": "Only child users can access this endpoint."}, status=403)
+            # You need a way to identify the child since request.user is not guaranteed now.
+            # For example, get child ID from query params: /api/earning-meter/?child_id=abc123
+            child_id = request.query_params.get('child_id')
 
-            child = request.user.child
+            if not child_id:
+                return Response({"error": "child_id is required as a query parameter."}, status=400)
+
+            try:
+                child = Child.objects.get(id=child_id)
+            except Child.DoesNotExist:
+                return Response({"error": "Child not found."}, status=404)
+
             wallet = child.wallet
 
             total_earned = wallet.total_earned
@@ -68,5 +77,80 @@ class EarningMeterView(APIView):
 
         except ChildWallet.DoesNotExist:
             return Response({"error": "Child wallet not found."}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+class SummaryView(APIView):
+    permission_classes = []
+
+    @extend_schema(
+        description="Weekly summary for barchart and pie chart (reward earned/spent/saved)",
+        responses=dict  # You can later plug in a serializer if needed
+    )
+    def get(self, request):
+        child_id = request.query_params.get("child_id")
+
+        if not child_id:
+            return Response({"error": "child_id is required"}, status=400)
+
+        try:
+            child = Child.objects.get(id=child_id)
+        except Child.DoesNotExist:
+            return Response({"error": "Child not found"}, status=404)
+
+        try:
+            now = timezone.now()
+            seven_days_ago = now - timezone.timedelta(days=7)
+
+            # Bar chart: reward earned per day
+            earned_transactions = Transaction.objects.filter(
+                child=child,
+                type="chore_reward",
+                status="paid",
+                created_at__gte=seven_days_ago
+            )
+
+            spent_transactions = Transaction.objects.filter(
+                child=child,
+                type="debit",  # assuming "debit" is the spent transaction type
+                status="paid",
+                created_at__gte=seven_days_ago
+            )
+
+            daily_earned = defaultdict(Decimal)
+            daily_spent = defaultdict(Decimal)
+
+            for tx in earned_transactions:
+                date = tx.created_at.strftime("%b %d")  # e.g., "Apr 20"
+                daily_earned[date] += tx.amount
+
+            for tx in spent_transactions:
+                date = tx.created_at.strftime("%b %d")
+                daily_spent[date] += tx.amount
+
+            # Prepare bar chart data
+            chart_labels = list({*daily_earned.keys(), *daily_spent.keys()})
+            chart_labels.sort()  # optional, to sort by day name
+
+            bar_chart_data = {
+                "labels": chart_labels,
+                "earned": [float(daily_earned.get(day, 0)) for day in chart_labels],
+                "spent": [float(daily_spent.get(day, 0)) for day in chart_labels]
+            }
+
+            # Pie chart: total reward saved vs spent
+            wallet = child.wallet
+            total_saved = wallet.balance
+            total_spent = wallet.total_spent
+
+            pie_chart_data = {
+                "reward_saved": float(total_saved),
+                "reward_spent": float(total_spent)
+            }
+
+            return Response({
+                "bar_chart": bar_chart_data,
+                "pie_chart": pie_chart_data
+            }, status=200)
+
         except Exception as e:
             return Response({"error": str(e)}, status=500)

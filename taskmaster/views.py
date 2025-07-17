@@ -1,8 +1,8 @@
 from rest_framework import generics, permissions, status
-#from waya_mentorLed.cache_utils import get_or_set_cache 
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import PermissionDenied
+
 from .models import Chore
 from children.models import Child
 from notifications.models import Notification
@@ -12,13 +12,17 @@ from .serializers import (
     ChoreSerializer,
     ChoreStatusUpdateSerializer,
 )
-from .permissions import IsParentOfChore, IsChildAssignedToChore
+from .permissions import IsParentOfChore, IsChildAssignedToChore, IsParentOrChildViewingOwnChores
 from .models import notify_parent_realtime
 
+from children.authentication import ChildJWTAuthentication  # Your custom child auth
+
+
+# --------------------------
+# Parent chore views (unchanged)
+# --------------------------
+
 class ChoreCreateView(generics.CreateAPIView):
-    """
-    POST /api/chores/ - Create a new chore
-    """
     serializer_class = ChoreCreateUpdateSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -34,9 +38,6 @@ class ChoreCreateView(generics.CreateAPIView):
 
 
 class ChoreListView(generics.ListAPIView):
-    """
-    GET /api/chores/ - List chores (filterable by status, assignedTo, category)
-    """
     serializer_class = ChoreReadSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -64,12 +65,8 @@ class ChoreListView(generics.ListAPIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class ChoreDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    GET /api/chores/{choreId}/ — Chore detail  
-    PUT /api/chores/{choreId}/update/ — Update chore  
-    DELETE /api/chores/{choreId}/delete/ — Delete chore
-    """
     queryset = Chore.objects.all()
     permission_classes = [permissions.IsAuthenticated, IsParentOfChore]
 
@@ -85,9 +82,6 @@ class ChoreDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class ChoreStatusUpdateView(generics.UpdateAPIView):
-    """
-    PATCH /api/chores/{id}/status/ - Update chore status (parent only)
-    """
     serializer_class = ChoreStatusUpdateSerializer
     permission_classes = [permissions.IsAuthenticated, IsParentOfChore]
     queryset = Chore.objects.all()
@@ -118,33 +112,74 @@ class ChoreStatusUpdateView(generics.UpdateAPIView):
         except Exception as e:
             return Response({"detail": f"Server error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-from .permissions import IsParentOrChildViewingOwnChores
+
+class ChoreDeleteView(generics.DestroyAPIView):
+    serializer_class = ChoreSerializer
+    queryset = Chore.objects.all()
+    permission_classes = [permissions.IsAuthenticated, IsParentOfChore]
+
+    def delete(self, request, *args, **kwargs):
+        try:
+            return super().delete(request, *args, **kwargs)
+        except Chore.DoesNotExist:
+            return Response({"detail": "Chore not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"detail": f"Server error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ChoreStatusBreakdownView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        chores = Chore.objects.filter(parent=user)
+
+        summary = {
+            'pending': chores.filter(status=Chore.STATUS_PENDING).count(),
+            'completed': chores.filter(status=Chore.STATUS_COMPLETED).count(),
+            'missed': chores.filter(status=Chore.STATUS_MISSED).count(),
+            'total': chores.count()
+        }
+        return Response(summary, status=status.HTTP_200_OK)
+
+
+# --------------------------
+# Child chore views — updated
+# --------------------------
 
 class ChildChoreListView(generics.ListAPIView):
-    """
-    GET /api/children/chores/?childId=<uuid>
-    """
     serializer_class = ChoreReadSerializer
     permission_classes = [permissions.IsAuthenticated, IsParentOrChildViewingOwnChores]
+    authentication_classes = [ChildJWTAuthentication]  # Use child auth here
 
     def get_queryset(self):
+        # Determine if request is made by a child or parent
+        # If child: use request.child
+        # If parent (fallback): can use query param childId for parent's child's chores
+        child = getattr(self.request, "child", None)
+        user = self.request.user
+
+        # If authenticated as a child, return their own chores only
+        if child is not None:
+            return Chore.objects.filter(assigned_to=child)
+
+        # Otherwise, assume a parent with childId query param
         child_id = self.request.query_params.get("childId")
+        if child_id:
+            try:
+                child_obj = Child.objects.get(id=child_id, parent=user)
+            except Child.DoesNotExist:
+                raise PermissionDenied("Child not found or does not belong to you.")
+            return Chore.objects.filter(assigned_to=child_obj)
 
-        if not child_id:
-            return Chore.objects.none()
-
-        try:
-            child = Child.objects.get(id=child_id)
-        except Child.DoesNotExist:
-            raise PermissionDenied("Child not found.")
-
-        return Chore.objects.filter(assigned_to=child)
-
+        # If no child or no permission, return empty queryset
+        return Chore.objects.none()
 
 
 class ChildChoreStatusUpdateView(generics.UpdateAPIView):
     serializer_class = ChoreStatusUpdateSerializer
     permission_classes = [permissions.IsAuthenticated, IsChildAssignedToChore]
+    authentication_classes = [ChildJWTAuthentication]
     queryset = Chore.objects.all()
 
     def get_object(self):
@@ -172,38 +207,3 @@ class ChildChoreStatusUpdateView(generics.UpdateAPIView):
             )
 
         return response
-
-
-class ChoreDeleteView(generics.DestroyAPIView):
-    serializer_class = ChoreSerializer
-    """
-    DELETE /api/chores/{id}/ - Delete a chore
-    """
-    queryset = Chore.objects.all()
-    permission_classes = [permissions.IsAuthenticated, IsParentOfChore]
-
-    def delete(self, request, *args, **kwargs):
-        try:
-            return super().delete(request, *args, **kwargs)
-        except Chore.DoesNotExist:
-            return Response({"detail": "Chore not found."}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({"detail": f"Server error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-class ChoreStatusBreakdownView(APIView):
-    """
-    GET /api/chores/summary/ - Returns count of completed, pending, missed, and total chores
-    """
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        user = request.user
-        chores = Chore.objects.filter(parent=user)
-
-        summary = {
-            'pending': chores.filter(status=Chore.STATUS_PENDING).count(),
-            'completed': chores.filter(status=Chore.STATUS_COMPLETED).count(),
-            'missed': chores.filter(status=Chore.STATUS_MISSED).count(),
-            'total': chores.count()
-        }
-        return Response(summary, status=status.HTTP_200_OK)

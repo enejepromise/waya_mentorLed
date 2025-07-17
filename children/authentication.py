@@ -1,30 +1,38 @@
-from rest_framework_simplejwt.authentication import JWTAuthentication
+# children/authentication.py
+
+import jwt
+from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+from django.conf import settings
 from children.models import Child
 
-class ChildJWTAuthentication(JWTAuthentication):
-    """
-    Custom JWT authentication class for Child model,
-    uses 'child_id' claim inside JWT.
-    """
 
-    def get_user(self, validated_token):
-        child_id = validated_token.get('child_id')
-        if not child_id:
-            raise AuthenticationFailed('Token missing child_id claim')
-
-        try:
-            return Child.objects.get(id=child_id)
-        except Child.DoesNotExist:
-            raise AuthenticationFailed('Child not found for given token.')
-
+class ChildJWTAuthentication(BaseAuthentication):
     def authenticate(self, request):
-        auth_result = super().authenticate(request)
-        if auth_result is None:
+        auth_header = request.headers.get('Authorization')
+
+        if not auth_header or not auth_header.startswith('Bearer '):
             return None
 
-        child = auth_result[0]
-        request.child = child
+        token = auth_header.split(" ")[1]
 
-        # Children aren't User instances, so return None user
-        return (None, None)
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            child_id = payload.get("child_id")
+
+            if not child_id:
+                raise AuthenticationFailed("Token missing child_id")
+
+            child = Child.objects.get(id=child_id)
+
+            # Set request.child here
+            request.child = child
+
+            return (child, token)
+
+        except jwt.ExpiredSignatureError:
+            raise AuthenticationFailed("Token expired")
+        except jwt.InvalidTokenError:
+            raise AuthenticationFailed("Invalid token")
+        except Child.DoesNotExist:
+            raise AuthenticationFailed("Child not found")
