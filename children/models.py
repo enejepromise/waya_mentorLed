@@ -11,7 +11,8 @@ class Child(models.Model):
         User,
         related_name='children',
         on_delete=models.CASCADE,
-        limit_choices_to={'role': User.ROLE_PARENT}
+        limit_choices_to={'role': User.ROLE_PARENT},
+        db_index=True
     )
 
     username = models.CharField(max_length=150, unique=True)
@@ -19,6 +20,7 @@ class Child(models.Model):
     pin = models.CharField(max_length=128)  # Hashed PIN
     avatar = models.ImageField(upload_to='child_avatars/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    db_index=True
 
     def set_pin(self, raw_pin):
         if not raw_pin.isdigit() or len(raw_pin) != 4:
@@ -43,6 +45,10 @@ class Child(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [  
+            models.Index(fields=['parent']),
+            models.Index(fields=['username']),
+        ]
 
     def __str__(self):
         return f"{self.username} (Child of {self.parent.full_name})"

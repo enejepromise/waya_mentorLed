@@ -33,39 +33,42 @@ class EarningMeterView(APIView):
             total_spent = wallet.total_spent
 
             # --- Bar chart earned/spent logic for last 7 days ---
-            last_7_days = timezone.now() - timezone.timedelta(days=7)
+            today = timezone.now().date()
+            seven_days_ago = today - timezone.timedelta(days=6)
+
             earned_qs = Transaction.objects.filter(
                 child=child,
                 type="chore_reward",
                 status="paid",
-                created_at__gte=last_7_days
+                created_at__date__gte=seven_days_ago
             )
+
             spent_qs = Transaction.objects.filter(
                 child=child,
                 type="debit",
                 status="paid",
-                created_at__gte=last_7_days
+                created_at__date__gte=seven_days_ago
             )
 
             earned_per_day = defaultdict(Decimal)
             spent_per_day = defaultdict(Decimal)
+
             for tx in earned_qs:
-                date_str = tx.created_at.strftime("%b %d")
-                earned_per_day[date_str] += tx.amount
+                tx_date = tx.created_at.date()
+                earned_per_day[tx_date] += tx.amount
+
             for tx in spent_qs:
-                date_str = tx.created_at.strftime("%b %d")
-                spent_per_day[date_str] += tx.amount
+                tx_date = tx.created_at.date()
+                spent_per_day[tx_date] += tx.amount
 
-            bar_chart_days = sorted(set(list(earned_per_day.keys()) + list(spent_per_day.keys())))
-            bar_chart_list = [
-                {
-                    "day": day,
-                    "earned": earned_per_day.get(day, Decimal("0.00")),
-                    "spent": spent_per_day.get(day, Decimal("0.00")),
-                }
-                for day in bar_chart_days
-            ]
-
+            bar_chart_list = []
+            for i in range(7):
+                day = seven_days_ago + timezone.timedelta(days=i)
+                bar_chart_list.append({
+                    "day": day.strftime("%A"),  # e.g., 'Monday'
+                    "earned": float(earned_per_day.get(day, Decimal("0.00"))),
+                    "spent": float(spent_per_day.get(day, Decimal("0.00"))),
+                })
             pie_chart = {
                 "reward_saved": total_saved,
                 "reward_spent": total_spent

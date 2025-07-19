@@ -43,3 +43,14 @@ def send_email_task(subject, recipient_email, message):
         [recipient_email],
         fail_silently=False,
     )
+
+from celery import shared_task
+
+@shared_task
+def sync_wallet_stats_to_dashboard(parent_id):
+    # Heavy operations like pre-generating dashboard stats
+    from familywallet.models import FamilyWallet
+    wallet = FamilyWallet.objects.select_related("parent").get(parent_id=parent_id)
+    # Simulate expensive dashboard preparation logic
+    _ = wallet.get_total_sent()
+    _ = wallet.get_total_pending()

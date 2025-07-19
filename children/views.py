@@ -1,9 +1,8 @@
-# children/views.py
+from django.core.cache import cache
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from children.authentication import ChildJWTAuthentication
-from rest_framework_simplejwt.tokens import RefreshToken
 from children.tokens import ChildRefreshToken
 
 from .models import Child
@@ -28,14 +27,32 @@ class ChildListView(generics.ListAPIView):
     serializer_class = ChildSerializer
     permission_classes = [IsAuthenticated]
 
+    # Implements caching and restricts retrieved fields for efficiency
     def get_queryset(self):
-        return Child.objects.filter(parent=self.request.user)
+        parent = self.request.user
+        cache_key = f"children_list_{parent.id}"
+        queryset = cache.get(cache_key)
+        if queryset is not None:
+            return queryset
+        # Only retrieve commonly used fields for performance
+        queryset = Child.objects.filter(parent=parent).only('id', 'username', 'name', 'avatar')
+        cache.set(cache_key, queryset, timeout=60 * 5)
+        return queryset
 
 
 class ChildDetailView(generics.RetrieveAPIView):
     serializer_class = ChildSerializer
     permission_classes = [IsAuthenticated, IsParentOfChild]
     queryset = Child.objects.all()
+
+    def get_object(self):
+        child = self.request.user.child  # Assuming child user is logged in
+        cache_key = f"child_detail_{child.id}"
+        cached_child = cache.get(cache_key)
+        if cached_child is not None:
+            return cached_child
+        cache.set(cache_key, child, timeout=60 * 5)
+        return child
 
 
 class ChildUpdateView(generics.UpdateAPIView):
@@ -53,7 +70,7 @@ class ChildUpdateView(generics.UpdateAPIView):
 
 
 class ChildDeleteView(generics.DestroyAPIView):
-    serializer_class = ChildSerializer  
+    serializer_class = ChildSerializer
     permission_classes = [IsAuthenticated, IsParentOfChild]
     queryset = Child.objects.all()
 
@@ -62,9 +79,6 @@ class ChildDeleteView(generics.DestroyAPIView):
             return super().delete(request, *args, **kwargs)
         except Exception as e:
             return Response({"detail": "Server error: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-from .permissions import IsParentOfChild
 
 
 class ChildLoginView(generics.GenericAPIView):
@@ -78,7 +92,7 @@ class ChildLoginView(generics.GenericAPIView):
         pin = serializer.validated_data['pin']
 
         try:
-            child = Child.objects.get(username=username)
+            child = Child.objects.only('id', 'username', 'name', 'avatar', 'pin').get(username=username)
         except Child.DoesNotExist:
             return Response(
                 {"detail": "Invalid credentials"},
@@ -91,7 +105,6 @@ class ChildLoginView(generics.GenericAPIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Create child-specific JWT tokens manually
         refresh = ChildRefreshToken.for_child(child)
         access_token = refresh.access_token
 
@@ -105,9 +118,6 @@ class ChildLoginView(generics.GenericAPIView):
         })
 
 
-
-
-# Example child-protected view using custom auth
 class ChildSelfDetailView(generics.RetrieveAPIView):
     serializer_class = ChildSerializer
     permission_classes = [IsAuthenticated]
