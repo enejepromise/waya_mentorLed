@@ -9,7 +9,10 @@ from .views import (
 
 urlpatterns = [
     # FAMILY WALLET ENDPOINTS
+    
     path('wallet/', FamilyWalletViewSet.as_view({'get': 'list'}), name='wallet-list'),
+    path('wallet/pin_status/', WalletViewSet.as_view({'get': 'pin_status'}), name='wallet-pin-status'),
+    
     path('wallet/add_funds/', FamilyWalletViewSet.as_view({'post': 'add_funds'}), name='wallet-add-funds'),
     path('wallet/dashboard_stats/', FamilyWalletViewSet.as_view({'get': 'dashboard_stats'}), name='wallet-dashboard-stats'),
     path('wallet/earnings_chart_data/', FamilyWalletViewSet.as_view({'get': 'earnings_chart_data'}), name='wallet-earnings-chart-data'),

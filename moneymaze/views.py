@@ -26,7 +26,6 @@ class ConceptListView(generics.ListAPIView):
     authentication_classes = [ChildJWTAuthentication]
     permission_classes = [IsAuthenticated]
 
-
 class ConceptProgressListView(generics.ListAPIView):
     serializer_class = ConceptProgressSerializer
     authentication_classes = [ChildJWTAuthentication]
@@ -38,13 +37,11 @@ class ConceptProgressListView(generics.ListAPIView):
             return ConceptProgress.objects.none()
         return ConceptProgress.objects.filter(child=child)
 
-
 class QuizDetailView(generics.RetrieveAPIView):
     queryset = Quiz.objects.all()
     serializer_class = QuizSerializer
     authentication_classes = [ChildJWTAuthentication]
     permission_classes = [IsAuthenticated]
-
 
 class SubmitQuizView(APIView):
     authentication_classes = [ChildJWTAuthentication]
@@ -126,7 +123,6 @@ class SubmitQuizView(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 class RewardListView(generics.ListAPIView):
     serializer_class = RewardEarnedSerializer
     authentication_classes = [ChildJWTAuthentication]
@@ -137,7 +133,6 @@ class RewardListView(generics.ListAPIView):
         if not child:
             return RewardEarned.objects.none()
         return RewardEarned.objects.filter(child=child)
-
 
 class DashboardView(APIView):
     serializer_class = DashboardSerializer
@@ -187,7 +182,6 @@ class WeeklyStreakView(APIView):
         serializer = WeeklyStreakSerializer(streak)
         return Response(serializer.data)
 
-
 class ConceptSectionListView(generics.ListAPIView):
     serializer_class = ConceptSectionSerializer
     authentication_classes = [ChildJWTAuthentication]
@@ -196,7 +190,6 @@ class ConceptSectionListView(generics.ListAPIView):
     def get_queryset(self):
         concept_id = self.kwargs['concept_id']
         return ConceptSection.objects.filter(concept_id=concept_id).order_by('order')
-
 
 class ConceptSectionDetailView(generics.RetrieveAPIView):
     serializer_class = ConceptSectionSerializer
@@ -234,7 +227,6 @@ class ConceptSectionDetailView(generics.RetrieveAPIView):
 
         return super().retrieve(request, *args, **kwargs)
 
-
 class CanAccessQuizView(APIView):
     authentication_classes = [ChildJWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -265,7 +257,6 @@ class CanAccessQuizView(APIView):
         })
 
 # ========== ADMIN VIEWS ==========
-
 class AdminConceptCreateView(generics.ListCreateAPIView):
     queryset = Concept.objects.all().order_by('level')
     serializer_class = ConceptSerializer
@@ -290,3 +281,10 @@ class AdminRewardCreateView(generics.ListCreateAPIView):
     queryset = Reward.objects.all()
     serializer_class = RewardSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
+
+class QuizListView(generics.ListAPIView):
+    queryset = Quiz.objects.all()
+    serializer_class = QuizSerializer
+    authentication_classes = [ChildJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+

@@ -1,43 +1,47 @@
 from django.urls import path
-from .views import (
-    ConceptListView, ConceptProgressListView, QuizDetailView,
-    SubmitQuizView, RewardListView, DashboardView,
-    AdminConceptCreateView, AdminQuizCreateView,
-    AdminQuestionCreateView, AdminAnswerChoiceCreateView,
-    AdminRewardCreateView, WeeklyStreakView,
-    ConceptSectionDetailView, ConceptSectionListView,
-    CanAccessQuizView  
-)
+from . import views
 
 urlpatterns = [
-    # Concept & Progress
-    path('concepts/', ConceptListView.as_view(), name='concept-list'),
-    path('concepts/progress/', ConceptProgressListView.as_view(), name='concept-progress'),
+    # Concepts
+    path('concepts/', views.ConceptListView.as_view(), name='concept-list'),
 
-    # Concept Sections
-    path('concepts/<uuid:concept_id>/sections/', ConceptSectionListView.as_view(), name='concept-section-list'),
-    path('concepts/<uuid:concept_id>/sections/<int:section_order>/', ConceptSectionDetailView.as_view(), name='concept-section-detail'),
+    # Concept Progress for current user (no param)
+    path('concept-progress/', views.ConceptProgressListView.as_view(), name='concept-progress-list'),
 
-    # Quiz
-    path('quizzes/<uuid:pk>/', QuizDetailView.as_view(), name='quiz-detail'),
-    path('quizzes/submit/', SubmitQuizView.as_view(), name='submit-quiz'),
+    # Quiz detail by quiz UUID
+    path('quizzes/<uuid:pk>/', views.QuizDetailView.as_view(), name='quiz-detail'),
+    path('quizzes/', views.QuizListView.as_view(), name='quiz-list'),
 
-    # ✅ Check if user can access quiz
-    path('concepts/<uuid:concept_id>/can-access-quiz/', CanAccessQuizView.as_view(), name='can-access-quiz'),
 
-    # Rewards
-    path('rewards/', RewardListView.as_view(), name='rewards-earned'),
+    # Submit quiz answers (POST)
+    path('quizzes/submit/', views.SubmitQuizView.as_view(), name='submit-quiz'),
 
-    # Dashboard
-    path('dashboard/', DashboardView.as_view(), name='dashboard'),
+    # Reward list for current user (no param)
+    path('rewards/', views.RewardListView.as_view(), name='reward-list'),
 
-    # Admin
-    path('admin/concepts/', AdminConceptCreateView.as_view(), name='admin-create-concept'),
-    path('admin/quizzes/', AdminQuizCreateView.as_view(), name='admin-create-quiz'),
-    path('admin/questions/', AdminQuestionCreateView.as_view(), name='admin-create-question'),
-    path('admin/answers/', AdminAnswerChoiceCreateView.as_view(), name='admin-create-answer'),
-    path('admin/rewards/', AdminRewardCreateView.as_view(), name='admin-create-reward'),
+    # Dashboard - summary stats for current user
+    path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
 
-    # Weekly Streak
-    path('weekly-streak/', WeeklyStreakView.as_view(), name='weekly-streak'),
+    # Weekly streak for current user
+    path('weekly-streak/', views.WeeklyStreakView.as_view(), name='weekly-streak'),
+
+    # List sections for a Concept by concept_id (UUID)
+    path('concepts/<uuid:concept_id>/sections/', views.ConceptSectionListView.as_view(), name='concept-section-list'),
+
+    # Detail of a ConceptSection by section UUID
+    path('sections/<uuid:pk>/', views.ConceptSectionDetailView.as_view(), name='concept-section-detail'),
+
+    # Check if user can access quiz for concept (concept_id UUID)
+    path('concepts/<uuid:concept_id>/can-access-quiz/', views.CanAccessQuizView.as_view(), name='can-access-quiz'),
+
+    # Admin Views
+    path('admin/concepts/', views.AdminConceptCreateView.as_view(), name='admin-concept-list-create'),
+
+    path('admin/quizzes/', views.AdminQuizCreateView.as_view(), name='admin-quiz-create'),
+
+    path('admin/questions/', views.AdminQuestionCreateView.as_view(), name='admin-question-create'),
+
+    path('admin/answer-choices/', views.AdminAnswerChoiceCreateView.as_view(), name='admin-answer-choice-create'),
+
+    path('admin/rewards/', views.AdminRewardCreateView.as_view(), name='admin-reward-list-create'),
 ]

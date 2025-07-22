@@ -25,13 +25,13 @@ class GoalSerializer(serializers.ModelSerializer):
             'trophy_image', 'trophy_type',
         ]
 
-    def get_percent_completed(self, obj):
+    def get_percent_completed(self, obj) -> float:
         return obj.percent_completed()
 
-    def get_time_remaining(self, obj):
+    def get_time_remaining(self, obj) -> int:
         return obj.time_remaining()
 
-    def get_saved_amount(self, obj):
+    def get_saved_amount(self, obj) -> Decimal:
         return obj.saved_amount()
 
 class GoalSummarySerializer(serializers.Serializer):

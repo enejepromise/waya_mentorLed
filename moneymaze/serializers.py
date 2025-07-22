@@ -3,14 +3,37 @@ from decimal import Decimal
 from .models import (
     Concept, ConceptProgress, Quiz, Question,
     AnswerChoice, QuizResult, Reward, RewardEarned,
-    WeeklyStreak, ConceptSection, SectionProgress
+    WeeklyStreak, ConceptSection, SectionProgress, ConceptDescription
 )
+
+class ConceptDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConceptDescription
+        fields = ['id', 'text', 'order']
 
 # Concept Section + Progress
 class ConceptSectionSerializer(serializers.ModelSerializer):
+    descriptions = ConceptDescriptionSerializer(many=True, read_only=True)
     class Meta:
         model = ConceptSection
-        fields = ['id', 'concept', 'title', 'content', 'order']
+        fields = ['id', 'concept', 'title', 'order', 'descriptions']
+
+class ConceptSerializer(serializers.ModelSerializer):
+    sections = ConceptSectionSerializer(many=True, read_only=True)
+    level = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Concept
+        fields = ['id', 'title', 'level', 'sections']
+
+    def get_level(self, obj):
+        # This uses the built-in Django method for ChoiceField
+        return obj.get_level_display()
+
+    def validate_title(self, value):
+        if Concept.objects.filter(title__iexact=value.strip()).exists():
+            raise serializers.ValidationError("A concept with this title already exists.")
+        return value
 
 
 class SectionProgressSerializer(serializers.ModelSerializer):
@@ -20,20 +43,7 @@ class SectionProgressSerializer(serializers.ModelSerializer):
         model = SectionProgress
         fields = ['id', 'child', 'section', 'viewed', 'viewed_at']
 
-
 # Concept Serializer (with Sections)
-class ConceptSerializer(serializers.ModelSerializer):
-    sections = ConceptSectionSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Concept
-        fields = ['id', 'title', 'description', 'level', 'sections']
-
-    def validate_title(self, value):
-        if Concept.objects.filter(title__iexact=value.strip()).exists():
-            raise serializers.ValidationError("A concept with this title already exists.")
-        return value
-
 # Concept Progress
 class ConceptProgressSerializer(serializers.ModelSerializer):
     concept = ConceptSerializer(read_only=True)
@@ -63,7 +73,6 @@ class AnswerChoiceSerializer(serializers.ModelSerializer):
 
         return data
 
-
 class QuestionSerializer(serializers.ModelSerializer):
     choices = AnswerChoiceSerializer(many=True, read_only=True)
 
@@ -80,14 +89,12 @@ class QuestionSerializer(serializers.ModelSerializer):
 
         return data
 
-
 class QuizSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Quiz
         fields = ['id', 'title', 'questions']
-
 
 class QuizSubmissionSerializer(serializers.Serializer):
     quiz_id = serializers.UUIDField()
@@ -124,7 +131,6 @@ class QuizSubmissionSerializer(serializers.Serializer):
 
         return data
 
-
 class QuizResultSerializer(serializers.ModelSerializer):
     quiz = QuizSerializer(read_only=True)
 
@@ -133,30 +139,24 @@ class QuizResultSerializer(serializers.ModelSerializer):
         fields = ['id', 'child', 'quiz', 'score', 'passed', 'taken_on']
         read_only_fields = ['child', 'score', 'passed', 'taken_on']
 
-
 # Rewards
 class RewardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reward
         fields = ['id', 'concept', 'name', 'description', 'image', 'points_required']
 
-
 class RewardEarnedSerializer(serializers.ModelSerializer):
     reward = RewardSerializer(read_only=True)
-
     class Meta:
         model = RewardEarned
         fields = ['id', 'child', 'reward', 'earned_on']
         read_only_fields = ['child', 'earned_on']
-
-
 # Dashboard
 class DashboardSerializer(serializers.Serializer):
     concepts_completed = serializers.IntegerField()
     total_concepts = serializers.IntegerField()
     progress_percentage = serializers.FloatField()
     rewards_earned = serializers.IntegerField()
-
 
 # Weekly Streak
 class WeeklyStreakSerializer(serializers.ModelSerializer):

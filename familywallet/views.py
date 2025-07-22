@@ -499,3 +499,12 @@ class WalletViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin):
                 'amount': txn.amount
             })
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    @action(detail=False, methods=['get'])
+    def pin_status(self, request):
+        try:
+            wallet = FamilyWallet.objects.get(parent=request.user)
+            pin_is_set = wallet.pin is not None and wallet.pin != ''
+        except FamilyWallet.DoesNotExist:
+            pin_is_set = False
+
+        return Response({'pin_set': pin_is_set})

@@ -66,6 +66,8 @@ class GoalViewSet(viewsets.ModelViewSet):
 
 
 class GoalSummaryView(APIView):
+    serializer_class = GoalSummarySerializer
+
     permission_classes = [IsAuthenticated]
     authentication_classes = [ChildJWTAuthentication]
 
