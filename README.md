@@ -105,5 +105,4 @@ The production environment is optimized for reliability and performance:
 * **Privacy:** GDPR-ready data handling and encrypted storage of sensitive fields.
 """
 
-with open("README-Waya.md", "w") as f:
-    f.write(readme_content)
+
