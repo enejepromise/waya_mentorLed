@@ -1,5 +1,3 @@
----
-
 ##  Project Overview
 
 Project Waya is an engine for a parent-child ecosystem. It streamlines task delegation, automates allowance distribution, and provides educational STEM-focused quizzes to build financial habits in a secure, role-based environment.
@@ -10,7 +8,6 @@ Project Waya is an engine for a parent-child ecosystem. It streamlines task dele
 * **Gamification:** Achievement-based badge rewards for consistency.
 * **Security:** High-standard data protection and role-based access control (RBAC).
 
----
 
 ##  Tech Stack
 
